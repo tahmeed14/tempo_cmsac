@@ -1,2 +1,6 @@
 # Data & Artifacts
 data/
+
+# CACHE
+*__pycache__*
+*.py[cod]
