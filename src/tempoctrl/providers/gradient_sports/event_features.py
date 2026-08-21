@@ -1,6 +1,13 @@
 import polars as pl
 
-DEAD_BALL_SET_PIECE_TYPES = ("C", "D", "F", "G", "K", "P", "T")
+DEAD_BALL_SET_PIECE_TYPES = ("C", # corner 
+                             "D", # drop ball
+                             "F", # free kick
+                             "G", # goal kick
+                             "K", # kickoff
+                             "P", # open play
+                             "T") # throw in
+
 TRANSITION_EVENTS = ("FIRSTKICKOFF", 
                      "SECONDKICKOFF", 
                      "THIRDKICKOFF", 
