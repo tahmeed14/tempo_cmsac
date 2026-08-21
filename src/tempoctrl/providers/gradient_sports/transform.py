@@ -12,9 +12,34 @@ EVENT_MAIN_COLUMNS = (
     "sequence",
     )
 
-INITIAL_TOUCH_COLUMNS = ()
-GAME_EVENTS_COLUMNS = ()
-POSSESSION_EVENTS_COLUMNS = ()
+INITIAL_TOUCH_COLUMNS = (
+    "initialPressureType",
+    "initialHeightType",
+    "initialBodyType")
+
+GAME_EVENTS_COLUMNS = (
+    "gameEventType",
+    "playerId",
+    "playerName",
+    "teamId",
+    "teamName",
+    "homeTeam",
+    "setpieceType",
+    "outType",
+    "endType",
+    "period",
+    "touches",
+    )
+
+POSSESSION_EVENTS_COLUMNS = (
+    "possessionEventType",
+    "gameClock",
+    "formattedGameClock",
+    "linesBrokenType",
+    "pressureType",
+    "crossOutcomeType",
+    "passOutcomeType",
+    )
 
 def select_relevant_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
     """Unnest selected event structs and return a flat DataFrame.
@@ -53,4 +78,20 @@ def select_relevant_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
             "teamAttackingDirection"
         ),
         *nested_fields,
-    )
+        ).rename(
+            str.lower
+            )
+
+def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Transform the raw event data into a flat DataFrame with game 
+    state.
+
+    Args:
+        df_in: Event data containing the required identifier and nested
+            struct columns.
+
+    Returns:
+        A flat Polars DataFrame containing the selected event fields and
+        game state variables.
+    """
+    return select_relevant_events_columns(df_in)
