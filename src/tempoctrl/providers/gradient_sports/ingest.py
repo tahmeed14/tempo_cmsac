@@ -1,6 +1,6 @@
 import polars as pl
 
-def read_event(local_path : str) -> pl.DataFrame:
+def read_events(local_path : str) -> pl.DataFrame:
     """read and unnest events JSON for a single match.
 
     Reads the raw events JSON for `local_path`, assigns a 1-based
