@@ -4,3 +4,6 @@ data/
 # CACHE
 *__pycache__*
 *.py[cod]
+
+# Docs
+CODESTYLE.md

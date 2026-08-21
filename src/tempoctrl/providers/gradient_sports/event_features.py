@@ -111,7 +111,8 @@ def create_game_state(df_in: pl.DataFrame) -> pl.DataFrame:
     """
     return create_match_scores(create_team_scores(df_in))
 
-# POSSESSION FEATURES
+
+# POSSESSION FEATURES ----
 def flag_possession_start(df_in: pl.DataFrame) -> pl.DataFrame:
     """Flag rows where a new team possession begins.
 
@@ -120,15 +121,15 @@ def flag_possession_start(df_in: pl.DataFrame) -> pl.DataFrame:
     starts so the first row is always flagged.
 
     Args:
-        df_in: Event data containing ``ge_teamId``, ``gameId``, and
-            ``ge_setpieceType``.
+        df_in: Event data containing ``ge_teamid``, ``gameid``, and
+            ``ge_setpiecetype``.
 
     Returns:
         Event data with a Boolean ``team_possession_start`` column.
     """
-    team_changed = pl.col("ge_teamId") != pl.col("ge_teamId").shift()
-    game_changed = pl.col("gameId") != pl.col("gameId").shift()
-    dead_ball_started = pl.col("ge_setpieceType").is_in(
+    team_changed = pl.col("ge_teamid") != pl.col("ge_teamid").shift()
+    game_changed = pl.col("gameid") != pl.col("gameid").shift()
+    dead_ball_started = pl.col("ge_setpiecetype").is_in(
         DEAD_BALL_SET_PIECE_TYPES
     )
 
@@ -139,7 +140,6 @@ def flag_possession_start(df_in: pl.DataFrame) -> pl.DataFrame:
         .fill_null(True)
         .alias("team_possession_start")
     )
-
 
 
 def event_features(df_in: pl.DataFrame) -> pl.DataFrame:
