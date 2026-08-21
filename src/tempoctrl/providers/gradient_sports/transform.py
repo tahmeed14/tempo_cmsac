@@ -41,7 +41,7 @@ POSSESSION_EVENTS_COLUMNS = (
     "passOutcomeType",
     )
 
-def select_relevant_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
+def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
     """Unnest selected event structs and return a flat DataFrame.
 
     Select the main event columns and configured fields from the nested
@@ -94,4 +94,4 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
         A flat Polars DataFrame containing the selected event fields and
         game state variables.
     """
-    return select_relevant_events_columns(df_in)
+    return select_events_columns(df_in)
