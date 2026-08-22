@@ -113,7 +113,7 @@ def create_match_scores(df_in: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def create_game_state(df_in: pl.DataFrame) -> pl.DataFrame:
+def add_gamestate_features(df_in: pl.DataFrame) -> pl.DataFrame:
     """Add team score and game-state context to an events DataFrame.
 
     Calls `create_team_scores` and then `create_match_scores` to attach
@@ -129,7 +129,7 @@ def create_game_state(df_in: pl.DataFrame) -> pl.DataFrame:
 
 
 # POSSESSION FEATURES ----
-def team_possession_start(df_in: pl.DataFrame) -> pl.DataFrame:
+def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
     """Flag rows where a new team possession begins.
 
     Identify possession changes caused by a team change, a new game, or
@@ -246,9 +246,40 @@ def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
         ).alias("match_team_player_possession_id"),
     )
 
+def add_possession_features(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Filter for possession-starting events and compute possession IDs.
+
+    Keeps only events that can start or reset possession, including
+    kickoffs, OTB, and related types. It then flags possession starts.
+    Team and player possession identifiers are assigned using helpers
+    from `eventsPossession.py`.
+
+    Args:
+        df_in: pl.DataFrame containing event rows with 
+        `ge_gameeventtype`.
+
+    Returns:
+        pl.DataFrame filtered to possession-relevant events, with
+        possession identifiers added.
+    """
+
+    # Filter events data for OTB, Kick Offs, and G (Ball hits the 
+    # woodwork/corner # flag and comes back into play)
+    df_out = df_in.filter(
+        pl.col('ge_gameeventtype').
+        is_in(TRANSITION_EVENTS))
+    
+    #TODO: Already sorted???
+    # df_out = df_out.sort(["gameId", "event_number"])
+
+    return create_player_possession_id(
+        create_team_possession_id(
+            create_team_possession_flag(df_in=df_out)
+            )
+        )
+
 def event_features(df_in: pl.DataFrame) -> pl.DataFrame:
-    df_out = create_game_state(df_in)
-    df_out = create_team_possession_id(team_possession_start(df_out))
-    df_out = create_player_possession_id(df_out)
+    df_out = add_gamestate_features(df_in)
+    df_out = add_possession_features(df_out)
 
     return df_out
