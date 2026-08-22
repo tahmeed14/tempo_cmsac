@@ -1,5 +1,6 @@
 import polars as pl
 
+# For ge_setpiecetype
 DEAD_BALL_SET_PIECE_TYPES = ("C", # corner 
                              "D", # drop ball
                              "F", # free kick
@@ -8,10 +9,18 @@ DEAD_BALL_SET_PIECE_TYPES = ("C", # corner
                              "P", # open play
                              "T") # throw in
 
+# For ge_gameeventtype
+PAUSE_EVENTS = ("SUB",
+                "ON",
+                "OFF",
+                "OUT",
+                "END"
+)
+
 TRANSITION_EVENTS = ("FIRSTKICKOFF", 
                      "SECONDKICKOFF", 
                      "THIRDKICKOFF", 
-                     "FOURTHKICKOFF", 
+                     "FOURTHKICKOFF",
                      "G", "OTB") # goals and out-of-bounds events
 
 # GAME STATE FEATURES
@@ -124,12 +133,12 @@ def flag_possession_start(df_in: pl.DataFrame) -> pl.DataFrame:
     """Flag rows where a new team possession begins.
 
     Identify possession changes caused by a team change, a new game, or
-    a dead-ball set piece. Null comparisons are treated as possession
-    starts so the first row is always flagged.
+    a dead-ball set piece or game-pause event. Null values do not trigger
+    possession starts. The first row is always flagged explicitly.
 
     Args:
-        df_in: Event data containing ``ge_teamid``, ``gameid``, and
-            ``ge_setpiecetype``.
+        df_in: Event data containing ``ge_teamid``, ``gameid``,
+            ``ge_setpiecetype``, and ``ge_gameeventtype``.
 
     Returns:
         Event data with a Boolean ``team_possession_start`` column.
@@ -139,12 +148,18 @@ def flag_possession_start(df_in: pl.DataFrame) -> pl.DataFrame:
     dead_ball_started = pl.col("ge_setpiecetype").is_in(
         DEAD_BALL_SET_PIECE_TYPES
     )
+    game_paused = pl.col("ge_gameeventtype").is_in(PAUSE_EVENTS)
+    first_event = pl.int_range(0, pl.len()) == 0
 
-    possession_started = team_changed | game_changed | dead_ball_started
+    possession_started = first_event | (
+        team_changed
+        | game_changed
+        | dead_ball_started
+        | game_paused
+    ).fill_null(False)
 
     return df_in.with_columns(
         possession_started
-        .fill_null(True)
         .alias("team_possession_start")
     )
 
