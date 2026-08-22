@@ -121,20 +121,6 @@ def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
             str.lower
             )
 
-def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
-    """Transform the raw event data into a flat DataFrame with game 
-    state.
-
-    Args:
-        df_in: Event data containing the required identifier and nested
-            struct columns.
-
-    Returns:
-        A flat Polars DataFrame containing the selected event fields and
-        game state variables.
-    """
-    return select_events_columns(df_in)
-
 def reclassify_ballheight(df_in : pl.DataFrame) -> pl.DataFrame:
    return (df_in.with_columns(
         pl.col("it_initialheighttype")
@@ -167,10 +153,23 @@ def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
         .alias("first_touch_bodypart")
         )
 
-def finalize_events(df_in : pl.DataFrame) -> pl.DataFrame:
-    # return reclassify_categories_events(df_in)
-    df_out = reclassify_ballheight(df_in = df_in)
+def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Transform the raw event data into a flat DataFrame with game 
+    state.
+
+    Args:
+        df_in: Event data containing the required identifier and nested
+            struct columns.
+
+    Returns:
+        A flat Polars DataFrame containing the selected event fields and
+        game state variables.
+    """
+
+    df_out = select_events_columns(df_in = df_in)
+    df_out = reclassify_ballheight(df_in = df_out)
     df_out = reclassify_pressuretype(df_in = df_out)
     df_out = reclassify_linesbrokentype(df_in = df_out)
     df_out = reclassify_firsttouch(df_in = df_out)
+
     return df_out
