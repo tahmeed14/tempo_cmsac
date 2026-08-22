@@ -274,8 +274,23 @@ def add_possession_features(df_in: pl.DataFrame) -> pl.DataFrame:
             )
         )
 
+# Possession Player Features
+def create_num_challenges(df_in : pl.DataFrame) -> pl.DataFrame:
+
+    return df_in.with_columns(
+        pl.col("pe_possessioneventtype")
+        .eq("CH")
+        .sum()
+        .over(["gameeventid", "match_team_player_possession_id"])
+        .alias("defender_num_challenges"),
+    )
+
+def add_possession_player_features(df_in: pl.DataFrame) -> pl.DataFrame:
+    return create_num_challenges(df_in = df_in)
+
 def event_features(df_in: pl.DataFrame) -> pl.DataFrame:
     df_out = add_gamestate_features(df_in)
     df_out = add_possession_features(df_out)
+    df_out = add_possession_player_features(df_out)
 
     return df_out
