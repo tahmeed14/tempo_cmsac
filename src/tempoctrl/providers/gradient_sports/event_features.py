@@ -222,6 +222,7 @@ def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
     )
 
     #TODO: Failing 1 test case
+    # could try using .ne_missing(player.shift())?
     player_possession_index = (
         (player_changed | team_possession_changed)
         .fill_null(True) # first comparison is always null | null
@@ -263,14 +264,9 @@ def add_possession_features(df_in: pl.DataFrame) -> pl.DataFrame:
         possession identifiers added.
     """
 
-    # Filter events data for OTB, Kick Offs, and G (Ball hits the 
-    # woodwork/corner # flag and comes back into play)
     df_out = df_in.filter(
         pl.col('ge_gameeventtype').
         is_in(TRANSITION_EVENTS))
-    
-    #TODO: Already sorted???
-    # df_out = df_out.sort(["gameId", "event_number"])
 
     return create_player_possession_id(
         create_team_possession_id(

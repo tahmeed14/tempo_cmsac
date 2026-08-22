@@ -1,5 +1,6 @@
 import polars as pl
 
+
 EVENT_MAIN_COLUMNS = (
     "event_number",
     "gameId",
@@ -36,6 +37,48 @@ POSSESSION_EVENTS_COLUMNS = (
     "crossOutcomeType",
     "passOutcomeType",
     )
+
+BODYPART_MAPPER = {
+    # Hands/Arms
+    "2H": "Hands/Arms", "CA": "Hands/Arms", "PA": "Hands/Arms", 
+    "PU": "Hands/Arms", "LH": "Hands/Arms", "RH": "Hands/Arms", 
+    "LA": "Hands/Arms", "RA": "Hands/Arms", "TWOHANDS": "Hands/Arms",
+
+    # Header
+    "HE": "Head",
+
+    # Upper Body
+    "CH": "Torso/Other", "BA": "Torso/Other",
+    "BO": "Torso/Other", # BO refers to Bottom which is butt :O
+    "LC": "Torso/Other", "RC": "Torso/Other",
+    
+    # Leg (not Foot)
+    "LK": "Leg (not Foot)", "RK": "Leg (not Foot)", "LS": "Leg (not Foot)", 
+    "RS": "Leg (not Foot)", "LT": "Leg (not Foot)", "RT": "Leg (not Foot)",
+    
+    # Foot
+    "LF": "Foot", "RF": "Foot", "LB": "Foot", "RB": "Foot",
+    "R" : "Foot", "L" : "Foot",
+    
+    # Not available
+    "VM": "N/A"
+}
+
+PRESSURE_MAPPER = {
+    "L" : "No Pressure",
+    "P" : "Pressured (inc. Attempted Pressure)",
+    "A" : "Pressured (inc. Attempted Pressure)",
+    "N" : "No Pressure"
+}
+
+BALL_HEIGHT_MAPPER = {
+    "A" : "Air",
+    "H" : "Air",
+    "L" : "Air",
+    "V" : "Air",
+    "G" : "Ground",
+    "M" : "N/A"
+}
 
 def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
     """Unnest selected event structs and return a flat DataFrame.
@@ -91,3 +134,62 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
         game state variables.
     """
     return select_events_columns(df_in)
+
+# def reclassify_ballheight(df_in : pl.DataFrame) -> pl.DataFrame:
+#    return df_in.with_columns(
+#         pl.col("it_initialHeightType")
+#         .replace_strict(BALL_HEIGHT_MAPPER, default="Not available")
+#         .alias("first_touch_ballheight")
+#         ) 
+
+def reclassify_categories_events(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Engineer and impute extra event-level features for modeling.
+
+    Reclassify initial-touch height, pressure, and body-part codes using
+    mappings from ``events_variables``. Fill missing line-break values,
+    count challenges within each player possession, and identify
+    successful passes and crosses.
+
+    Args:
+        df_in: Event data containing the unnested fields required to
+            engineer initial-touch, pressure, and possession features.
+
+    Returns:
+        Event data with recategorized values, challenge counts, and the
+        ``successful_pass_or_cross`` indicator.
+    """
+    return df_in.with_columns(
+        pl.col("it_initialheighttype")
+        .replace_strict(BALL_HEIGHT_MAPPER, default="N/A")
+        .alias("first_touch_ballheight"),
+
+        pl.col("pe_pressuretype")
+        .replace_strict(PRESSURE_MAPPER, default="No Pressure"),
+
+        pl.col("it_initialpressuretype")
+        .replace_strict(PRESSURE_MAPPER, default="No Pressure"),
+
+        pl.col("pe_linesbrokentype").fill_null("None"),
+
+        pl.col("pe_possessioneventtype")
+        .eq("CH")
+        .sum()
+        .over(["gameeventid", "match_team_player_possession_id"])
+        .alias("pe_num_challenges"),
+
+        pl.col("it_initialbodytype")
+        .replace_strict(BODYPART_MAPPER, default="N/A")
+        .fill_null("Not available")
+        .alias("first_touch_bodypart"),
+
+        pl.when(pl.col("pe_possessioneventtype").is_in(["PA", "CR"]))
+        .then(
+            pl.coalesce(["pe_passoutcometype", 
+                         "pe_crossoutcometype"]) == "C"
+        )
+        .otherwise(None)
+        .alias("successful_pass_or_cross"),
+    )
+
+def finalize_events(df_in : pl.DataFrame) -> pl.DataFrame:
+    return reclassify_categories_events(df_in)
