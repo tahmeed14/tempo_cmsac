@@ -135,12 +135,31 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
     """
     return select_events_columns(df_in)
 
-# def reclassify_ballheight(df_in : pl.DataFrame) -> pl.DataFrame:
-#    return df_in.with_columns(
-#         pl.col("it_initialHeightType")
-#         .replace_strict(BALL_HEIGHT_MAPPER, default="Not available")
-#         .alias("first_touch_ballheight")
-#         ) 
+def reclassify_ballheight(df_in : pl.DataFrame) -> pl.DataFrame:
+   return (df_in.with_columns(
+        pl.col("it_initialheighttype")
+        .replace_strict(BALL_HEIGHT_MAPPER, default="N/A")
+        .alias("first_touch_ballheight")
+        ).drop("it_initialheighttype")
+   )
+
+def reclassify_pressuretype(df_in : pl.DataFrame) -> pl.DataFrame:
+    return df_in.with_columns(
+        pl.col("pe_pressuretype")
+        .replace_strict(PRESSURE_MAPPER, default="No Pressure")
+        .alias("defender_pressure_type"),
+
+        pl.col("it_initialpressuretype")
+        .replace_strict(PRESSURE_MAPPER, default="No Pressure")
+        .alias("first_touch_defender_pressure_type")
+    )
+
+def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
+    return df_in.with_columns(
+        pl.col("pe_linesbrokentype").fill_null("None")
+    )
+
+
 
 def reclassify_categories_events(df_in: pl.DataFrame) -> pl.DataFrame:
     """Engineer and impute extra event-level features for modeling.
@@ -159,17 +178,7 @@ def reclassify_categories_events(df_in: pl.DataFrame) -> pl.DataFrame:
         ``successful_pass_or_cross`` indicator.
     """
     return df_in.with_columns(
-        pl.col("it_initialheighttype")
-        .replace_strict(BALL_HEIGHT_MAPPER, default="N/A")
-        .alias("first_touch_ballheight"),
 
-        pl.col("pe_pressuretype")
-        .replace_strict(PRESSURE_MAPPER, default="No Pressure"),
-
-        pl.col("it_initialpressuretype")
-        .replace_strict(PRESSURE_MAPPER, default="No Pressure"),
-
-        pl.col("pe_linesbrokentype").fill_null("None"),
 
         pl.col("pe_possessioneventtype")
         .eq("CH")
@@ -192,4 +201,8 @@ def reclassify_categories_events(df_in: pl.DataFrame) -> pl.DataFrame:
     )
 
 def finalize_events(df_in : pl.DataFrame) -> pl.DataFrame:
-    return reclassify_categories_events(df_in)
+    # return reclassify_categories_events(df_in)
+    df_out = reclassify_ballheight(df_in = df_in)
+    df_out = reclassify_pressuretype(df_in = df_out)
+    df_out = reclassify_linesbrokentype(df_in = df_out)
+    return df_out
