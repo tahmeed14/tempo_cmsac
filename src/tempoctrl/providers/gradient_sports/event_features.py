@@ -232,7 +232,7 @@ def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
     )
 
     return possession_data.select(
-        pl.exclude("player_possession_index"),
+        pl.exclude(["player_possession_index", "match_possession_id"]),
         pl.concat_str(
             [
                 "gameid",
@@ -241,7 +241,7 @@ def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
                 "player_possession_index",
             ],
             separator="_",
-        ).alias("individual_possession_id"),
+        ).alias("match_team_player_possession_id"),
     )
 
 def event_features(df_in: pl.DataFrame) -> pl.DataFrame:
