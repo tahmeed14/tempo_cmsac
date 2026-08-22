@@ -16,9 +16,12 @@ def main():
     df = transform_events(df)
     df = event_features(df)
 
+    df.write_parquet(file="data/investigate/10517.parquet", compression="zstd")
     print(df.head(5))
     for i in df.columns:
         print(i)
+
+    # print(df[""].value_counts())
 
 
 if __name__ == "__main__":
