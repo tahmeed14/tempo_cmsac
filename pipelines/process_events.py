@@ -1,8 +1,7 @@
-import polars as pl
-
 from tempoctrl.providers.gradient_sports.ingest import read_events
 from tempoctrl.providers.gradient_sports.transform import (
-    transform_events
+    transform_events,
+    finalize_events
     )
 from tempoctrl.providers.gradient_sports.event_features import (
     event_features
@@ -15,8 +14,12 @@ def main():
     df = read_events(local_path)
     df = transform_events(df)
     df = event_features(df)
-
-    df.write_parquet(file="data/investigate/10517.parquet", compression="zstd")
+    df = finalize_events(df)
+    
+    # df.write_parquet(file="data/investigate/10517_filterafter.parquet",
+    # df.write_parquet(file="data/investigate/10517_filterbefore.parquet",
+    df.write_parquet(file="data/investigate/10517.parquet",              
+                     compression="zstd")
     print(df.head(5))
     for i in df.columns:
         print(i)

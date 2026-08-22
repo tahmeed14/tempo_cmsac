@@ -30,7 +30,6 @@ GAME_EVENTS_COLUMNS = (
 
 POSSESSION_EVENTS_COLUMNS = (
     "possessionEventType",
-    "gameClock",
     "formattedGameClock",
     "linesBrokenType",
     "pressureType",
@@ -312,9 +311,11 @@ def add_possession_identifiers(df_in: pl.DataFrame) -> pl.DataFrame:
         possession identifiers added.
     """
 
-    df_out = df_in.filter(
-        pl.col('ge_gameeventtype').
-        is_in(TRANSITION_EVENTS))
+    # TODO: Investigate why before and after changes the possession ids
+    # df_out = df_in.filter(
+    #     pl.col('ge_gameeventtype').
+    #     is_in(TRANSITION_EVENTS))
+    df_out = df_in
 
     return create_player_possession_id(
         create_team_possession_id(
@@ -340,9 +341,12 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
     df_out = reclassify_pressuretype(df_in = df_out)
     df_out = reclassify_linesbrokentype(df_in = df_out)
     df_out = reclassify_firsttouch(df_in = df_out)
-    # df_out = add_possession_identifiers(df_in = df_out)
+    df_out = add_possession_identifiers(df_in = df_out)
 
     return df_out
 
-def finalize_events():
-    pass
+def finalize_events(df_in : pl.DataFrame) -> pl.DataFrame:
+    return df_in.filter(
+        pl.col("ge_gameeventtype").
+        is_in(TRANSITION_EVENTS)
+    )

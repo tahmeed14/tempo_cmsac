@@ -140,7 +140,6 @@ def add_possession_player_features(df_in: pl.DataFrame) -> pl.DataFrame:
 
 def event_features(df_in: pl.DataFrame) -> pl.DataFrame:
     df_out = add_gamestate_features(df_in)
-    # df_out = add_possession_features(df_out)
-    # df_out = add_possession_player_features(df_out)
+    df_out = add_possession_player_features(df_out)
 
     return df_out
