@@ -6,7 +6,8 @@ data/
 *.py[cod]
 
 # Docs
-CODESTYLE.md
+env/
+
 notebooks/
 
 # Environment
