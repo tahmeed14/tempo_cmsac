@@ -198,8 +198,55 @@ def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
         ).alias("match_team_possession_id"),
     )
 
+def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Create individual player-possession identifiers.
+
+    Flag a new player possession when the player or team possession
+    changes. Cumulatively number those possessions and combine the game,
+    team, player, and possession values into a unique identifier.
+
+    Args:
+        df_in: Event data containing player and team-possession fields.
+
+    Returns:
+        Event data with an ``individual_possession_id`` column, without
+        temporary player-possession columns.
+    """
+    player_changed = (
+        pl.col("ge_playerid")
+        != pl.col("ge_playerid").shift()
+    )
+    team_possession_changed = (
+        pl.col("match_team_possession_id")
+        != pl.col("match_team_possession_id").shift()
+    )
+
+    player_possession_index = (
+        (player_changed | team_possession_changed)
+        .fill_null(True) # first comparison is always null | null
+        .cum_sum()
+    )
+
+    possession_data = df_in.with_columns(
+        player_possession_index.alias("player_possession_index")
+    )
+
+    return possession_data.select(
+        pl.exclude("player_possession_index"),
+        pl.concat_str(
+            [
+                "gameid",
+                "ge_teamname",
+                "ge_playerid",
+                "player_possession_index",
+            ],
+            separator="_",
+        ).alias("individual_possession_id"),
+    )
+
 def event_features(df_in: pl.DataFrame) -> pl.DataFrame:
     df_out = create_game_state(df_in)
     df_out = create_team_possession_id(team_possession_start(df_out))
+    df_out = create_player_possession_id(df_out)
 
     return df_out
