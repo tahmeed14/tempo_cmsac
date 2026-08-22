@@ -129,12 +129,13 @@ def create_game_state(df_in: pl.DataFrame) -> pl.DataFrame:
 
 
 # POSSESSION FEATURES ----
-def flag_possession_start(df_in: pl.DataFrame) -> pl.DataFrame:
+def team_possession_start(df_in: pl.DataFrame) -> pl.DataFrame:
     """Flag rows where a new team possession begins.
 
     Identify possession changes caused by a team change, a new game, or
-    a dead-ball set piece or game-pause event. Null values do not trigger
-    possession starts. The first row is always flagged explicitly.
+    a dead-ball set piece or game-pause event. Null values do not 
+    trigger possession starts. The first row is always flagged 
+    explicitly.
 
     Args:
         df_in: Event data containing ``ge_teamid``, ``gameid``,
@@ -142,6 +143,7 @@ def flag_possession_start(df_in: pl.DataFrame) -> pl.DataFrame:
 
     Returns:
         Event data with a Boolean ``team_possession_start`` column.
+        Never a null
     """
     team_changed = pl.col("ge_teamid") != pl.col("ge_teamid").shift()
     game_changed = pl.col("gameid") != pl.col("gameid").shift()
@@ -163,6 +165,41 @@ def flag_possession_start(df_in: pl.DataFrame) -> pl.DataFrame:
         .alias("team_possession_start")
     )
 
+def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Create match-level and team-level possession identifiers.
+
+    Convert possession-start flags into a cumulative possession number,
+    then combine the game, team, and possession values into a unique
+    identifier. Remove the temporary start flag afterward.
+
+    Args:
+        df_in: Event data containing ``team_possession_start``,
+            ``gameid``, and ``ge_teamname``.
+
+    Returns:
+        Event data with ``match_possession_id`` and
+        ``match_team_possession_id`` columns.
+    """
+    possession_data = df_in.with_columns(
+        pl.col("team_possession_start")
+        .cum_sum()
+        .over("gameid")
+        .alias("match_possession_id")
+    )
+
+    # Intentionally did not place following code in one select() call
+    # to avoid repeating the cum_sum() expression when constructing the
+    # string identifier, potentially calculating it twice.
+    return possession_data.select(
+        pl.exclude("team_possession_start"),
+        pl.concat_str(
+            ["gameid", "ge_teamname", "match_possession_id"],
+            separator="_",
+        ).alias("match_team_possession_id"),
+    )
 
 def event_features(df_in: pl.DataFrame) -> pl.DataFrame:
-    return create_game_state(df_in)
+    df_out = create_game_state(df_in)
+    df_out = create_team_possession_id(team_possession_start(df_out))
+
+    return df_out
