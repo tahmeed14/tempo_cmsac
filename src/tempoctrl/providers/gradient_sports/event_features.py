@@ -276,6 +276,7 @@ def add_possession_features(df_in: pl.DataFrame) -> pl.DataFrame:
 
 # Possession Player Features
 def create_num_challenges(df_in : pl.DataFrame) -> pl.DataFrame:
+    """Count defender challenges for each player possession."""
 
     return df_in.with_columns(
         pl.col("pe_possessioneventtype")
@@ -285,8 +286,26 @@ def create_num_challenges(df_in : pl.DataFrame) -> pl.DataFrame:
         .alias("defender_num_challenges"),
     )
 
+def create_pass_outcome(df_in : pl.DataFrame) -> pl.DataFrame:
+    """Identify successful passes and crosses in each event."""
+
+    return df_in.with_columns(
+
+        pl.when(pl.col("pe_possessioneventtype").is_in(["PA", "CR"]))
+        .then(
+            pl.coalesce(["pe_passoutcometype", 
+                         "pe_crossoutcometype"]) == "C"
+        )
+        .otherwise(None)
+        .alias("successful_pass_or_cross"),
+    )
+
 def add_possession_player_features(df_in: pl.DataFrame) -> pl.DataFrame:
-    return create_num_challenges(df_in = df_in)
+    """Add player-possession context features."""
+
+    return create_pass_outcome(
+        create_num_challenges(df_in = df_in)
+    )
 
 def event_features(df_in: pl.DataFrame) -> pl.DataFrame:
     df_out = add_gamestate_features(df_in)
