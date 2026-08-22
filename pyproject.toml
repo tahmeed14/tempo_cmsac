@@ -1,5 +1,5 @@
 [project]
-name = "tempo_cmsac"
+name = "tempoctrl"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -61,3 +61,10 @@ dev = [
     "ipykernel>=7.1.0",
     "pytest>=9.1.1",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13"]
+build-backend = "uv_build"
