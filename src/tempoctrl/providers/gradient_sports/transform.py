@@ -159,50 +159,18 @@ def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
         pl.col("pe_linesbrokentype").fill_null("None")
     )
 
-
-
-def reclassify_categories_events(df_in: pl.DataFrame) -> pl.DataFrame:
-    """Engineer and impute extra event-level features for modeling.
-
-    Reclassify initial-touch height, pressure, and body-part codes using
-    mappings from ``events_variables``. Fill missing line-break values,
-    count challenges within each player possession, and identify
-    successful passes and crosses.
-
-    Args:
-        df_in: Event data containing the unnested fields required to
-            engineer initial-touch, pressure, and possession features.
-
-    Returns:
-        Event data with recategorized values, challenge counts, and the
-        ``successful_pass_or_cross`` indicator.
-    """
+def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
     return df_in.with_columns(
-
-
-        pl.col("pe_possessioneventtype")
-        .eq("CH")
-        .sum()
-        .over(["gameeventid", "match_team_player_possession_id"])
-        .alias("pe_num_challenges"),
-
         pl.col("it_initialbodytype")
         .replace_strict(BODYPART_MAPPER, default="N/A")
         .fill_null("Not available")
-        .alias("first_touch_bodypart"),
-
-        pl.when(pl.col("pe_possessioneventtype").is_in(["PA", "CR"]))
-        .then(
-            pl.coalesce(["pe_passoutcometype", 
-                         "pe_crossoutcometype"]) == "C"
+        .alias("first_touch_bodypart")
         )
-        .otherwise(None)
-        .alias("successful_pass_or_cross"),
-    )
 
 def finalize_events(df_in : pl.DataFrame) -> pl.DataFrame:
     # return reclassify_categories_events(df_in)
     df_out = reclassify_ballheight(df_in = df_in)
     df_out = reclassify_pressuretype(df_in = df_out)
     df_out = reclassify_linesbrokentype(df_in = df_out)
+    df_out = reclassify_firsttouch(df_in = df_out)
     return df_out
