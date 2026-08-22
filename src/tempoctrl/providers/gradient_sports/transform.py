@@ -5,11 +5,7 @@ EVENT_MAIN_COLUMNS = (
     "gameId",
     "gameEventId",
     "possessionEventId",
-    "startTime",
-    "endTime",
     "duration",
-    "eventTime",
-    "sequence",
     )
 
 INITIAL_TOUCH_COLUMNS = (
