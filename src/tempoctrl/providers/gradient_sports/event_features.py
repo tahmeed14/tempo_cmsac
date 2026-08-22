@@ -221,10 +221,12 @@ def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
         != pl.col("match_team_possession_id").shift()
     )
 
+    #TODO: Failing 1 test case
     player_possession_index = (
         (player_changed | team_possession_changed)
         .fill_null(True) # first comparison is always null | null
         .cum_sum()
+        .over("gameid")
     )
 
     possession_data = df_in.with_columns(
