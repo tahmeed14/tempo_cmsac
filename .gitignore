@@ -9,3 +9,7 @@ data/
 env/
 
 notebooks/
+
+# Environment
+.venv/
+env/
