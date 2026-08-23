@@ -54,7 +54,10 @@ PAUSE_EVENTS = ("SUB",
                 "END"
 )
 
-TRANSITION_EVENTS = ("FIRSTKICKOFF", 
+TRANSITION_EVENTS = (
+                    #WARNING: changing this will impact
+                    # create_team_possession_flag() 
+                    "FIRSTKICKOFF", 
                      "SECONDKICKOFF", 
                      "THIRDKICKOFF", 
                      "FOURTHKICKOFF",
@@ -143,6 +146,39 @@ def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
             str.lower
             )
 
+
+def drop_pen_shootouts(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Remove shootout events occurring after the end of normal play.
+
+    Find the last event in each match where ``ge_gameeventtype`` is
+    ``"END"`` and ``ge_endtype`` is ``"G"``. Keep that event and every
+    earlier event in the match. If a match has no qualifying end event,
+    retain all of its rows.
+
+    Args:
+        df_in: Event data containing ``gameid``, ``event_number``,
+            ``ge_gameeventtype``, and ``ge_endtype``.
+
+    Returns:
+        Event data through the end of normal play for each match.
+    """
+    normal_time_ended = (
+        (pl.col("ge_gameeventtype") == "END")
+        & (pl.col("ge_endtype") == "G")
+    )
+    normal_time_end_event = (
+        pl.when(normal_time_ended)
+        .then(pl.col("event_number"))
+        .max()
+        .over("gameid")
+    )
+
+    return df_in.filter(
+        normal_time_end_event.is_null()
+        | (pl.col("event_number") <= normal_time_end_event)
+    )
+
+
 def reclassify_ballheight(df_in : pl.DataFrame) -> pl.DataFrame:
    return (df_in.with_columns(
         pl.col("it_initialheighttype")
@@ -150,6 +186,7 @@ def reclassify_ballheight(df_in : pl.DataFrame) -> pl.DataFrame:
         .alias("first_touch_ballheight")
         ).drop("it_initialheighttype")
    )
+
 
 def reclassify_pressuretype(df_in : pl.DataFrame) -> pl.DataFrame:
     return df_in.with_columns(
@@ -162,10 +199,12 @@ def reclassify_pressuretype(df_in : pl.DataFrame) -> pl.DataFrame:
         .alias("first_touch_defender_pressure_type")
     )
 
+
 def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
     return df_in.with_columns(
         pl.col("pe_linesbrokentype").fill_null("None")
     )
+
 
 def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
     return df_in.with_columns(
@@ -175,14 +214,15 @@ def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
         .alias("first_touch_bodypart")
         )
 
+
 # Identify possessions for teams & players
 def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
     """Flag rows where a new team possession begins.
 
-    Identify possession changes caused by a team change, a new game, or
-    a dead-ball set piece or game-pause event. Null values do not 
-    trigger possession starts. The first row is always flagged 
-    explicitly.
+    Identify possession changes independently within each game. A team
+    change, dead-ball set piece, or game-pause event starts a possession.
+    Null values do not trigger possession starts. The first row of every
+    game is always flagged explicitly.
 
     Args:
         df_in: Event data containing ``ge_teamid``, ``gameid``,
@@ -192,32 +232,37 @@ def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
         Event data with a Boolean ``team_possession_start`` column.
         Never a null
     """
-    team_changed = pl.col("ge_teamid") != pl.col("ge_teamid").shift()
-    game_changed = pl.col("gameid") != pl.col("gameid").shift()
+    team_changed = (
+        pl.col("ge_teamid")
+        != pl.col("ge_teamid").shift().over("gameid")
+    )
     dead_ball_started = pl.col("ge_setpiecetype").is_in(
         DEAD_BALL_SET_PIECE_TYPES
     )
     game_paused = pl.col("ge_gameeventtype").is_in(PAUSE_EVENTS)
-    first_event = pl.int_range(0, pl.len()) == 0
-
+    first_event = (pl.col("ge_gameeventtype")
+                   .is_in(TRANSITION_EVENTS[0:4])
+    )
+    
     possession_started = first_event | (
         team_changed
-        | game_changed
         | dead_ball_started
         | game_paused
     ).fill_null(False)
 
     return df_in.with_columns(
-        possession_started
-        .alias("team_possession_start")
+        possession_started.alias("team_possession_start")
+    ).filter(
+        ~pl.col("ge_gameeventtype").is_in(PAUSE_EVENTS)
     )
+
 
 def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
     """Create match-level and team-level possession identifiers.
 
     Convert possession-start flags into a cumulative possession number,
     then combine the game, team, and possession values into a unique
-    identifier. Remove the temporary start flag afterward.
+    identifier.
 
     Args:
         df_in: Event data containing ``team_possession_start``,
@@ -229,21 +274,28 @@ def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
     """
     possession_data = df_in.with_columns(
         pl.col("team_possession_start")
+        .fill_null(False)
         .cum_sum()
         .over("gameid")
         .alias("match_possession_id")
     )
 
-    # Intentionally did not place following code in one select() call
-    # to avoid repeating the cum_sum() expression when constructing the
-    # string identifier, potentially calculating it twice.
-    return possession_data.select(
-        pl.exclude("team_possession_start"),
+    #FIXME: Exlcude the team_possession_start flag
+    # return possession_data.select(
+    #     pl.exclude("team_possession_start"),
+    #     pl.concat_str(
+    #         ["gameid", "ge_teamname", "match_possession_id"],
+    #         separator="_",
+    #     ).alias("match_team_possession_id"),
+    # )
+
+    return possession_data.with_columns(
         pl.concat_str(
-            ["gameid", "ge_teamname", "match_possession_id"],
+           ["gameid", "ge_teamname", "match_possession_id"],
             separator="_",
-        ).alias("match_team_possession_id"),
+        ).alias("match_team_possession_id") 
     )
+
 
 def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
     """Create individual player-possession identifiers.
@@ -259,20 +311,28 @@ def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
         Event data with an ``individual_possession_id`` column, without
         temporary player-possession columns.
     """
-    player_changed = (
+    previous_known_player = (
         pl.col("ge_playerid")
-        != pl.col("ge_playerid").shift()
+        # Uncomment the following line only if you want to make the 
+        # assumption that a missing id between the ids of the same 
+        # player does not break possession between events
+        # .forward_fill() 
+        .shift()
+        .over("gameid")
+    )
+    player_changed = (
+        pl.col("ge_playerid").is_not_null()
+        & pl.col("ge_playerid").ne_missing(previous_known_player)
     )
     team_possession_changed = (
         pl.col("match_team_possession_id")
-        != pl.col("match_team_possession_id").shift()
+        .ne_missing(
+            pl.col("match_team_possession_id").shift().over("gameid")
+        )
     )
 
-    #TODO: Failing 1 test case
-    # could try using .ne_missing(player.shift())?
     player_possession_index = (
         (player_changed | team_possession_changed)
-        .fill_null(True) # first comparison is always null | null
         .cum_sum()
         .over("gameid")
     )
@@ -294,6 +354,7 @@ def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
         ).alias("match_team_player_possession_id"),
     )
 
+
 def add_possession_identifiers(df_in: pl.DataFrame) -> pl.DataFrame:
     """Filter for possession-starting events and compute possession IDs.
 
@@ -311,17 +372,12 @@ def add_possession_identifiers(df_in: pl.DataFrame) -> pl.DataFrame:
         possession identifiers added.
     """
 
-    # TODO: Investigate why before and after changes the possession ids
-    # df_out = df_in.filter(
-    #     pl.col('ge_gameeventtype').
-    #     is_in(TRANSITION_EVENTS))
-    df_out = df_in
-
     return create_player_possession_id(
         create_team_possession_id(
-            create_team_possession_flag(df_in=df_out)
+            create_team_possession_flag(df_in=df_in)
             )
         )
+
 
 def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
     """Transform the raw event data into a flat DataFrame with game 
@@ -336,17 +392,35 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
         game state variables.
     """
 
-    df_out = select_events_columns(df_in = df_in)
-    df_out = reclassify_ballheight(df_in = df_out)
-    df_out = reclassify_pressuretype(df_in = df_out)
-    df_out = reclassify_linesbrokentype(df_in = df_out)
-    df_out = reclassify_firsttouch(df_in = df_out)
-    df_out = add_possession_identifiers(df_in = df_out)
+    df_out = select_events_columns(df_in=df_in)
+    df_out = drop_pen_shootouts(df_in=df_out)
+    df_out = reclassify_ballheight(df_in=df_out)
+    df_out = reclassify_pressuretype(df_in=df_out)
+    df_out = reclassify_linesbrokentype(df_in=df_out)
+    df_out = reclassify_firsttouch(df_in=df_out)
+    df_out = add_possession_identifiers(df_in=df_out)
 
     return df_out
 
+#TODO: put ORDER to the top
+FINALIZE_ORDER = ("match_team_possession_id",
+         "match_team_player_possession_id",
+         "team_possession_start",
+         "pe_formattedgameclock",
+         "event_number",
+         "ge_playername",
+         "ge_gameeventtype")
+
+FINALIZE_EXCLUDE = (
+    *FINALIZE_ORDER,
+    "ge_outtype", 
+    "ge_endtype" 
+)
+
 def finalize_events(df_in : pl.DataFrame) -> pl.DataFrame:
-    return df_in.filter(
-        pl.col("ge_gameeventtype").
-        is_in(TRANSITION_EVENTS)
-    )
+
+    df_out = df_in.select(*FINALIZE_ORDER,
+                          pl.exclude(*FINALIZE_ORDER,
+                                     *FINALIZE_EXCLUDE))
+
+    return df_out
