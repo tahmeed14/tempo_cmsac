@@ -146,11 +146,38 @@ def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
             str.lower
             )
 
-def filter_for_normaltime_events(df_in : pl.DataFrame) -> pl.DataFrame:
-    # ge_endtype == "G"
-    # ge_gameeventtype == "END"
-    #TODO:
-    return df_in
+
+def drop_pen_shootouts(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Remove shootout events occurring after the end of normal play.
+
+    Find the last event in each match where ``ge_gameeventtype`` is
+    ``"END"`` and ``ge_endtype`` is ``"G"``. Keep that event and every
+    earlier event in the match. If a match has no qualifying end event,
+    retain all of its rows.
+
+    Args:
+        df_in: Event data containing ``gameid``, ``event_number``,
+            ``ge_gameeventtype``, and ``ge_endtype``.
+
+    Returns:
+        Event data through the end of normal play for each match.
+    """
+    normal_time_ended = (
+        (pl.col("ge_gameeventtype") == "END")
+        & (pl.col("ge_endtype") == "G")
+    )
+    normal_time_end_event = (
+        pl.when(normal_time_ended)
+        .then(pl.col("event_number"))
+        .max()
+        .over("gameid")
+    )
+
+    return df_in.filter(
+        normal_time_end_event.is_null()
+        | (pl.col("event_number") <= normal_time_end_event)
+    )
+
 
 def reclassify_ballheight(df_in : pl.DataFrame) -> pl.DataFrame:
    return (df_in.with_columns(
@@ -159,6 +186,7 @@ def reclassify_ballheight(df_in : pl.DataFrame) -> pl.DataFrame:
         .alias("first_touch_ballheight")
         ).drop("it_initialheighttype")
    )
+
 
 def reclassify_pressuretype(df_in : pl.DataFrame) -> pl.DataFrame:
     return df_in.with_columns(
@@ -171,10 +199,12 @@ def reclassify_pressuretype(df_in : pl.DataFrame) -> pl.DataFrame:
         .alias("first_touch_defender_pressure_type")
     )
 
+
 def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
     return df_in.with_columns(
         pl.col("pe_linesbrokentype").fill_null("None")
     )
+
 
 def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
     return df_in.with_columns(
@@ -183,6 +213,7 @@ def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
         .fill_null("Not available")
         .alias("first_touch_bodypart")
         )
+
 
 # Identify possessions for teams & players
 def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
@@ -224,6 +255,7 @@ def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
     ).filter(
         ~pl.col("ge_gameeventtype").is_in(["OUT", "SUB", "OFF", "ON"])
     )
+
 
 def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
     """Create match-level and team-level possession identifiers.
@@ -322,6 +354,7 @@ def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
         ).alias("match_team_player_possession_id"),
     )
 
+
 def add_possession_identifiers(df_in: pl.DataFrame) -> pl.DataFrame:
     """Filter for possession-starting events and compute possession IDs.
 
@@ -351,6 +384,7 @@ def add_possession_identifiers(df_in: pl.DataFrame) -> pl.DataFrame:
             )
         )
 
+
 def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
     """Transform the raw event data into a flat DataFrame with game 
     state.
@@ -364,16 +398,17 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
         game state variables.
     """
 
-    df_out = select_events_columns(df_in = df_in)
-    df_out = reclassify_ballheight(df_in = df_out)
-    df_out = reclassify_pressuretype(df_in = df_out)
-    df_out = reclassify_linesbrokentype(df_in = df_out)
-    df_out = reclassify_firsttouch(df_in = df_out)
-    df_out = add_possession_identifiers(df_in = df_out)
+    df_out = select_events_columns(df_in=df_in)
+    df_out = drop_pen_shootouts(df_in=df_out)
+    df_out = reclassify_ballheight(df_in=df_out)
+    df_out = reclassify_pressuretype(df_in=df_out)
+    df_out = reclassify_linesbrokentype(df_in=df_out)
+    df_out = reclassify_firsttouch(df_in=df_out)
+    df_out = add_possession_identifiers(df_in=df_out)
 
     return df_out
 
-
+#TODO: put ORDER to the top
 ORDER = ("match_team_possession_id",
          "match_team_player_possession_id",
          "team_possession_start",
