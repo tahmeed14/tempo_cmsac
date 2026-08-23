@@ -143,6 +143,12 @@ def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
             str.lower
             )
 
+def filter_for_normaltime_events(df_in : pl.DataFrame) -> pl.DataFrame:
+    # ge_endtype == "G"
+    # ge_gameeventtype == "END"
+    #TODO:
+    return df_in
+
 def reclassify_ballheight(df_in : pl.DataFrame) -> pl.DataFrame:
    return (df_in.with_columns(
         pl.col("it_initialheighttype")
@@ -179,10 +185,10 @@ def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
 def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
     """Flag rows where a new team possession begins.
 
-    Identify possession changes caused by a team change, a new game, or
-    a dead-ball set piece or game-pause event. Null values do not 
-    trigger possession starts. The first row is always flagged 
-    explicitly.
+    Identify possession changes independently within each game. A team
+    change, dead-ball set piece, or game-pause event starts a possession.
+    Null values do not trigger possession starts. The first row of every
+    game is always flagged explicitly.
 
     Args:
         df_in: Event data containing ``ge_teamid``, ``gameid``,
@@ -192,27 +198,27 @@ def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
         Event data with a Boolean ``team_possession_start`` column.
         Never a null
     """
-    team_changed = pl.col("ge_teamid") != pl.col("ge_teamid").shift()
-    game_changed = pl.col("gameid") != pl.col("gameid").shift()
+    team_changed = (
+        pl.col("ge_teamid")
+        != pl.col("ge_teamid").shift().over("gameid")
+    )
     dead_ball_started = pl.col("ge_setpiecetype").is_in(
         DEAD_BALL_SET_PIECE_TYPES
     )
     game_paused = pl.col("ge_gameeventtype").is_in(PAUSE_EVENTS)
-    first_event = pl.int_range(0, pl.len()) == 0
+    #TODO: use kickoffs to create this
+    first_event = pl.int_range(0, pl.len()).over("gameid") == 0
 
     possession_started = first_event | (
         team_changed
-        | game_changed
         | dead_ball_started
         | game_paused
     ).fill_null(False)
 
     return df_in.with_columns(
-        possession_started
-        .alias("team_possession_start")
-        ).filter(
-            ~pl.col("ge_gameeventtype").
-            is_in(["OUT", "SUB", "OFF", "ON"])
+        possession_started.alias("team_possession_start")
+    ).filter(
+        ~pl.col("ge_gameeventtype").is_in(["OUT", "SUB", "OFF", "ON"])
     )
 
 def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
@@ -220,7 +226,7 @@ def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
 
     Convert possession-start flags into a cumulative possession number,
     then combine the game, team, and possession values into a unique
-    identifier. Remove the temporary start flag afterward.
+    identifier.
 
     Args:
         df_in: Event data containing ``team_possession_start``,
@@ -232,14 +238,13 @@ def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
     """
     possession_data = df_in.with_columns(
         pl.col("team_possession_start")
+        .fill_null(False)
         .cum_sum()
         .over("gameid")
         .alias("match_possession_id")
     )
 
-    # Intentionally did not place following code in one select() call
-    # to avoid repeating the cum_sum() expression when constructing the
-    # string identifier, potentially calculating it twice.
+    #FIXME: Exlcude the team_possession_start flag
     # return possession_data.select(
     #     pl.exclude("team_possession_start"),
     #     pl.concat_str(
@@ -255,6 +260,7 @@ def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
         ).alias("match_team_possession_id") 
     )
 
+
 def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
     """Create individual player-possession identifiers.
 
@@ -269,20 +275,28 @@ def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
         Event data with an ``individual_possession_id`` column, without
         temporary player-possession columns.
     """
-    player_changed = (
+    previous_known_player = (
         pl.col("ge_playerid")
-        != pl.col("ge_playerid").shift()
+        # Uncomment the following line only if you want to make the 
+        # assumption that a missing id between the ids of the same 
+        # player does not break possession between events
+        # .forward_fill() 
+        .shift()
+        .over("gameid")
+    )
+    player_changed = (
+        pl.col("ge_playerid").is_not_null()
+        & pl.col("ge_playerid").ne_missing(previous_known_player)
     )
     team_possession_changed = (
         pl.col("match_team_possession_id")
-        != pl.col("match_team_possession_id").shift()
+        .ne_missing(
+            pl.col("match_team_possession_id").shift().over("gameid")
+        )
     )
 
-    #TODO: Failing 1 test case
-    # could try using .ne_missing(player.shift())?
     player_possession_index = (
         (player_changed | team_possession_changed)
-        .fill_null(True) # first comparison is always null | null
         .cum_sum()
         .over("gameid")
     )
