@@ -11,3 +11,6 @@ env/
 notebooks/
 
 .DS_Store
+# Environment
+.venv/
+env/
