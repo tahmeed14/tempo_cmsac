@@ -345,8 +345,23 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
 
     return df_out
 
+
+ORDER = ("match_team_possession_id",
+         "match_team_player_possession_id",
+         "pe_formattedgameclock",
+         "event_number",
+         "ge_playername",
+         "ge_gameeventtype",
+         "ge_outtype",
+         "ge_endtype")
+
 def finalize_events(df_in : pl.DataFrame) -> pl.DataFrame:
-    return df_in.filter(
-        pl.col("ge_gameeventtype").
-        is_in(TRANSITION_EVENTS)
-    )
+
+    df_out = df_in.select(*ORDER,
+                          pl.exclude(ORDER))
+    # return df_in.filter(
+    #     pl.col("ge_gameeventtype").
+    #     is_in(TRANSITION_EVENTS)
+    # )
+
+    return df_out

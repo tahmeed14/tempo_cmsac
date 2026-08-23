@@ -9,3 +9,5 @@ data/
 env/
 
 notebooks/
+
+.DS_Store

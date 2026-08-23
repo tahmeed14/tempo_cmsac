@@ -13,7 +13,6 @@ def main():
 
     df = read_events(local_path)
     df = transform_events(df)
-    df = event_features(df)
     df = finalize_events(df)
     
     # df.write_parquet(file="data/investigate/10517_filterafter.parquet",
