@@ -253,7 +253,7 @@ def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
     return df_in.with_columns(
         possession_started.alias("team_possession_start")
     ).filter(
-        ~pl.col("ge_gameeventtype").is_in(["OUT", "SUB", "OFF", "ON"])
+        ~pl.col("ge_gameeventtype").is_in(PAUSE_EVENTS)
     )
 
 
