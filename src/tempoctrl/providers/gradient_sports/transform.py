@@ -54,7 +54,10 @@ PAUSE_EVENTS = ("SUB",
                 "END"
 )
 
-TRANSITION_EVENTS = ("FIRSTKICKOFF", 
+TRANSITION_EVENTS = (
+                    #WARNING: changing this will impact
+                    # create_team_possession_flag() 
+                    "FIRSTKICKOFF", 
                      "SECONDKICKOFF", 
                      "THIRDKICKOFF", 
                      "FOURTHKICKOFF",
@@ -206,9 +209,10 @@ def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
         DEAD_BALL_SET_PIECE_TYPES
     )
     game_paused = pl.col("ge_gameeventtype").is_in(PAUSE_EVENTS)
-    #TODO: use kickoffs to create this
-    first_event = pl.int_range(0, pl.len()).over("gameid") == 0
-
+    first_event = (pl.col("ge_gameeventtype")
+                   .is_in(TRANSITION_EVENTS[0:4])
+    )
+    
     possession_started = first_event | (
         team_changed
         | dead_ball_started
