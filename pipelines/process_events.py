@@ -24,8 +24,5 @@ def main():
     for i in df.columns:
         print(i)
 
-    # print(df[""].value_counts())
-
-
 if __name__ == "__main__":
     main()

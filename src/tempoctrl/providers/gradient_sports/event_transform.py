@@ -409,18 +409,36 @@ FINALIZE_ORDER = ("match_team_possession_id",
          "pe_formattedgameclock",
          "event_number",
          "ge_playername",
-         "ge_gameeventtype")
+         "ge_playerid",
+         "ge_gameeventtype",
+         )
 
 FINALIZE_EXCLUDE = (
     *FINALIZE_ORDER,
     "ge_outtype", 
-    "ge_endtype" 
+    "ge_endtype",
+    "it_initialpressuretype",
+    "it_initialbodytype"
 )
 
-def finalize_events(df_in : pl.DataFrame) -> pl.DataFrame:
+def finalize_events(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Select final event columns and remove source-struct prefixes.
 
-    df_out = df_in.select(*FINALIZE_ORDER,
-                          pl.exclude(*FINALIZE_ORDER,
-                                     *FINALIZE_EXCLUDE))
-
-    return df_out
+    Remove rows without a team-possession identifier, arrange the final
+    columns, and strip leading ``ge_`` and ``pe_`` prefixes from column
+    names.
+    """
+    return (
+        df_in.filter(pl.col("match_team_possession_id").is_not_null())
+        .select(
+            *FINALIZE_ORDER,
+            pl.exclude(*FINALIZE_ORDER, *FINALIZE_EXCLUDE),
+        )
+        .rename(
+            lambda column_name: (
+                column_name[3:]
+                if column_name.startswith(("ge_", "pe_"))
+                else column_name
+            )
+        )
+    )

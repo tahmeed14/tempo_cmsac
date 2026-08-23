@@ -1,0 +1,18 @@
+TODOs:
+    ✔ investigate diff possession counts @done(26-08-22 23:38)
+    ✔ the order of filtering for TRANSITION_EVENTS leads to different unique possession counts @done(26-08-22 23:38)
+    ☐ create_player_possession_id 1 failed test
+    ☐ Issue 1 on repo
+    ☐ Issue 2 on repo
+    ☐ Finalize event_transform.py
+        ☐ order the columns
+        ☐ remove redundant
+        ✔ rename cols @done(26-08-23 15:05)
+    
+    ☐ ingest.py
+    ☐ tracking_transform
+    ☐ tracking_features
+
+
+    ☐ merge.py
+    ☐ load.py
