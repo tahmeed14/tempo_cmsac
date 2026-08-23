@@ -210,6 +210,8 @@ def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
     return df_in.with_columns(
         possession_started
         .alias("team_possession_start")
+        ).filter(
+            ~pl.col("ge_gameeventtype").is_in(["OUT"])
     )
 
 def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
@@ -237,12 +239,19 @@ def create_team_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
     # Intentionally did not place following code in one select() call
     # to avoid repeating the cum_sum() expression when constructing the
     # string identifier, potentially calculating it twice.
-    return possession_data.select(
-        pl.exclude("team_possession_start"),
+    # return possession_data.select(
+    #     pl.exclude("team_possession_start"),
+    #     pl.concat_str(
+    #         ["gameid", "ge_teamname", "match_possession_id"],
+    #         separator="_",
+    #     ).alias("match_team_possession_id"),
+    # )
+
+    return possession_data.with_columns(
         pl.concat_str(
-            ["gameid", "ge_teamname", "match_possession_id"],
+           ["gameid", "ge_teamname", "match_possession_id"],
             separator="_",
-        ).alias("match_team_possession_id"),
+        ).alias("match_team_possession_id") 
     )
 
 def create_player_possession_id(df_in: pl.DataFrame) -> pl.DataFrame:
@@ -348,6 +357,7 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
 
 ORDER = ("match_team_possession_id",
          "match_team_player_possession_id",
+         "team_possession_start",
          "pe_formattedgameclock",
          "event_number",
          "ge_playername",
