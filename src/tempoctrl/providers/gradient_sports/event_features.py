@@ -4,10 +4,7 @@ import polars as pl
 # GAME STATE FEATURES
 def create_team_scores(df_in: pl.DataFrame) -> pl.DataFrame:
     """Compute cumulative home and away scores for each event.
-
-    Find the final event of regulation or extra time, remove subsequent
-    post-match penalty events, and calculate the running score for both
-    teams.
+    Calculate the running score for both teams.
 
     Args:
         df: Event data containing ``event_number``, ``ge_endtype``, and
@@ -20,14 +17,6 @@ def create_team_scores(df_in: pl.DataFrame) -> pl.DataFrame:
     Raises:
         ValueError: If the data does not contain an end-of-play event.
     """
-    end_event_number = df_in.select(
-        pl.col("event_number")
-        .filter(pl.col("ge_endtype") == "G") # "G" end of half/quarter
-        .max()
-    ).item()
-
-    if end_event_number is None:
-        raise ValueError("No end-of-play event was found in the event data.")
 
     score_expressions = [
         pl.when(pl.col("ge_outtype") == team_code)
@@ -41,9 +30,7 @@ def create_team_scores(df_in: pl.DataFrame) -> pl.DataFrame:
         )
     ]
 
-    return df_in.filter(
-        pl.col("event_number") <= end_event_number
-    ).with_columns(score_expressions)
+    return df_in.with_columns(score_expressions)
 
 
 def create_match_scores(df_in: pl.DataFrame) -> pl.DataFrame:
