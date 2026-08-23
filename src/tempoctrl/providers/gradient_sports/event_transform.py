@@ -372,15 +372,9 @@ def add_possession_identifiers(df_in: pl.DataFrame) -> pl.DataFrame:
         possession identifiers added.
     """
 
-    # TODO: Investigate why before and after changes the possession ids
-    # df_out = df_in.filter(
-    #     pl.col('ge_gameeventtype').
-    #     is_in(TRANSITION_EVENTS))
-    df_out = df_in
-
     return create_player_possession_id(
         create_team_possession_id(
-            create_team_possession_flag(df_in=df_out)
+            create_team_possession_flag(df_in=df_in)
             )
         )
 
@@ -409,23 +403,24 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
     return df_out
 
 #TODO: put ORDER to the top
-ORDER = ("match_team_possession_id",
+FINALIZE_ORDER = ("match_team_possession_id",
          "match_team_player_possession_id",
          "team_possession_start",
          "pe_formattedgameclock",
          "event_number",
          "ge_playername",
-         "ge_gameeventtype",
-         "ge_outtype",
-         "ge_endtype")
+         "ge_gameeventtype")
+
+FINALIZE_EXCLUDE = (
+    *FINALIZE_ORDER,
+    "ge_outtype", 
+    "ge_endtype" 
+)
 
 def finalize_events(df_in : pl.DataFrame) -> pl.DataFrame:
 
-    df_out = df_in.select(*ORDER,
-                          pl.exclude(ORDER))
-    # return df_in.filter(
-    #     pl.col("ge_gameeventtype").
-    #     is_in(TRANSITION_EVENTS)
-    # )
+    df_out = df_in.select(*FINALIZE_ORDER,
+                          pl.exclude(*FINALIZE_ORDER,
+                                     *FINALIZE_EXCLUDE))
 
     return df_out

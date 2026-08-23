@@ -116,6 +116,9 @@ def create_pass_outcome(df_in : pl.DataFrame) -> pl.DataFrame:
         )
         .otherwise(None)
         .alias("successful_pass_or_cross"),
+    ).select(
+        pl.exclude("pe_passoutcometype", 
+                   "pe_crossoutcometype")
     )
 
 def add_possession_player_features(df_in: pl.DataFrame) -> pl.DataFrame:

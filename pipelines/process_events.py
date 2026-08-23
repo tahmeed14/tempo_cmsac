@@ -1,5 +1,5 @@
 from tempoctrl.providers.gradient_sports.ingest import read_events
-from tempoctrl.providers.gradient_sports.transform import (
+from tempoctrl.providers.gradient_sports.event_transform import (
     transform_events,
     finalize_events
     )
