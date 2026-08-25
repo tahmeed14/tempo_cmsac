@@ -45,7 +45,7 @@ def select_columns(df_in : pl.LazyFrame) -> pl.LazyFrame:
         *COLUMNS
     )
 
-def tracking_transform(df_in : pl.LazyFrame) -> pl.LazyFrame:
+def transform_tracking(df_in : pl.LazyFrame) -> pl.LazyFrame:
     return (df_in
             .pipe(rename_columns)
             .pipe(recast_columns)

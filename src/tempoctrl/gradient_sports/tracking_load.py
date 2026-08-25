@@ -13,7 +13,7 @@ COLUMN_ORDER = (
 
 )
 
-def tracking_load(
+def load_tracking(
     df_in: pl.LazyFrame,
     match_id: int | str,
     overwrite: bool = False) -> None:
