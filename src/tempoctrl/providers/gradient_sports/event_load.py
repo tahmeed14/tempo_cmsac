@@ -1,5 +1,13 @@
 import polars as pl
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
 
 FINALIZE_ORDER = (
         "gameid",
@@ -42,6 +50,16 @@ def remove_event_prefixes(df_in : pl.DataFrame) -> pl.DataFrame:
         )
     )
 
+# FIXME: 
+RENAME_MAPPER = {
+    "gameid" : "game_id",
+    "gameeventid" : "game_event_id",
+    "possessioneventid" : "possession_event_id"
+    }
+
+def rename_columns(df_in : pl.DataFrame) -> pl.DataFrame:
+    return df_in.rename(RENAME_MAPPER)
+
 #TODO:
 def validate_events(df_in : pl.DataFrame) -> pl.DataFrame:
     """"""
@@ -56,9 +74,10 @@ def load_events(df_in: pl.DataFrame,
 
     # polish
     events_df = (df_in.pipe(order_event_columns)
-                 .pipe(remove_event_prefixes))
+                 .pipe(remove_event_prefixes)
+                 .pipe(rename_columns))
 
-    print(events_df)
+    logger.debug(events_df)
 
     # validate
 
@@ -68,5 +87,3 @@ def load_events(df_in: pl.DataFrame,
     events_df.write_parquet(file = f'''{output_dir}{match_id}.parquet''',
                     compression="zstd"
                     )
-        
-    
