@@ -54,6 +54,27 @@ PAUSE_EVENTS = ("SUB",
                 "END"
 )
 
+FINALIZE_ORDER = (
+        "gameid",
+        "pe_formattedgameclock",
+        "gamestate",
+        "ge_playername",
+        "ge_playerid",
+        "ge_teamname",
+        "ge_teamid",
+        "match_team_possession_id",
+        "match_team_player_possession_id",
+        "team_possession_start",
+        "event_number",
+        "ge_gameeventtype"
+        )
+
+FINALIZE_EXCLUDE = (
+    *FINALIZE_ORDER,
+    "ge_outtype", 
+    "ge_endtype",
+)
+
 TRANSITION_EVENTS = (
                     #WARNING: changing this will impact
                     # create_team_possession_flag() 
@@ -103,6 +124,27 @@ BALL_HEIGHT_MAPPER = {
     "V" : "Air",
     "G" : "Ground",
     "M" : "N/A"
+}
+
+SETPIECE_MAPPER = {
+    "O" : "Open Play",
+    "D" : "Drop Kick",
+    "F" : "Free Kick",
+    "G" : "Goal Kick",
+    "K" : "Kickoff",
+    "P" : "Penalty",
+    "T" : "Throw In",
+    "C" : "Corner"
+}
+
+LINESBROKEN_MAPPER = {
+    "A" : "Attack",
+    "AD" : "Attack & Defense (Midfield Bypassed)",
+    "AM" : "Attack & Midfield",
+    "AMD" : "Attack, Midfield, & Defense",
+    "D" : "Defense",
+    "M" : "Midfield",
+    "MD" : "Midfield & Defense"
 }
 
 def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
@@ -197,12 +239,8 @@ def reclassify_pressuretype(df_in : pl.DataFrame) -> pl.DataFrame:
         pl.col("it_initialpressuretype")
         .replace_strict(PRESSURE_MAPPER, default="No Pressure")
         .alias("first_touch_defender_pressure_type")
-    )
-
-
-def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
-    return df_in.with_columns(
-        pl.col("pe_linesbrokentype").fill_null("None")
+        ).drop(["it_initialpressuretype", 
+                "pe_pressuretype"]
     )
 
 
@@ -212,8 +250,23 @@ def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
         .replace_strict(BODYPART_MAPPER, default="N/A")
         .fill_null("Not available")
         .alias("first_touch_bodypart")
-        )
+        ).drop("it_initialbodytype")
 
+
+def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
+    return df_in.with_columns(
+        pl.col("pe_linesbrokentype")
+        .replace_strict(LINESBROKEN_MAPPER, default = "None")
+        .fill_null("None")
+    )
+
+
+def rename_classes_setpieces(df_in : pl.DataFrame) -> pl.DataFrame:
+    return df_in.with_columns(
+        pl.col("ge_setpiecetype")
+        .replace_strict(SETPIECE_MAPPER, default="N/A")
+        .fill_null("Not available")
+    )
 
 # Identify possessions for teams & players
 def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
@@ -398,29 +451,31 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
     df_out = reclassify_pressuretype(df_in=df_out)
     df_out = reclassify_linesbrokentype(df_in=df_out)
     df_out = reclassify_firsttouch(df_in=df_out)
+    df_out = rename_classes_setpieces(df_in=df_out)
     df_out = add_possession_identifiers(df_in=df_out)
 
     return df_out
 
-#TODO: put ORDER to the top
-FINALIZE_ORDER = ("match_team_possession_id",
-         "match_team_player_possession_id",
-         "team_possession_start",
-         "pe_formattedgameclock",
-         "event_number",
-         "ge_playername",
-         "ge_gameeventtype")
 
-FINALIZE_EXCLUDE = (
-    *FINALIZE_ORDER,
-    "ge_outtype", 
-    "ge_endtype" 
-)
 
-def finalize_events(df_in : pl.DataFrame) -> pl.DataFrame:
+def finalize_events(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Select final event columns and remove source-struct prefixes.
 
-    df_out = df_in.select(*FINALIZE_ORDER,
-                          pl.exclude(*FINALIZE_ORDER,
-                                     *FINALIZE_EXCLUDE))
-
-    return df_out
+    Remove rows without a team-possession identifier, arrange the final
+    columns, and strip leading ``ge_`` and ``pe_`` prefixes from column
+    names.
+    """
+    return (
+        df_in.filter(pl.col("match_team_possession_id").is_not_null())
+        .select(
+            *FINALIZE_ORDER,
+            pl.exclude(*FINALIZE_ORDER, *FINALIZE_EXCLUDE),
+        )
+        .rename(
+            lambda column_name: (
+                column_name[3:]
+                if column_name.startswith(("ge_", "pe_"))
+                else column_name
+            )
+        )
+    )

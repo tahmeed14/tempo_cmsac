@@ -1,5 +1,0 @@
-TODOs:
-    ✔ investigate diff possession counts @done(26-08-22 23:38)
-    ✔ the order of filtering for TRANSITION_EVENTS leads to different unique possession counts @done(26-08-22 23:38)
-    ☐ create_player_possession_id 1 failed test
-    ☐ Issue 1 on repo 
