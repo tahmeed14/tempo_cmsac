@@ -1,13 +1,13 @@
 import polars as pl
 
-from tempoctrl.providers.gradient_sports.ingest import (
+from tempoctrl.gradient_sports.ingest import (
     scan_tracking,
     stage_tracking,
 )
-from tempoctrl.providers.gradient_sports.tracking_transform import (
+from tempoctrl.gradient_sports.tracking_transform import (
     tracking_transform
 )
-from tempoctrl.providers.gradient_sports.tracking_load import (
+from tempoctrl.gradient_sports.tracking_load import (
     tracking_load
 )
 

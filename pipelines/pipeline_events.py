@@ -1,11 +1,7 @@
-from tempoctrl.providers.gradient_sports.ingest import read_events
-from tempoctrl.providers.gradient_sports.event_transform import (
-    transform_events
-    )
-from tempoctrl.providers.gradient_sports.event_features import (
-    features_events
-    )
-from tempoctrl.providers.gradient_sports.event_load import load_events
+from tempoctrl.gradient_sports.ingest import read_events
+from tempoctrl.gradient_sports.event_transform import transform_events
+from tempoctrl.gradient_sports.event_features import features_events
+from tempoctrl.gradient_sports.event_load import load_events
 
 
 def run_pipeline(match_id : int) -> None:
