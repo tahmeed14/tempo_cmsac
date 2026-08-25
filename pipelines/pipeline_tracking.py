@@ -1,15 +1,25 @@
-from tempoctrl.providers.gradient_sports.ingest import stage_tracking
+import polars as pl
 
-def run_pipeline(match_id : int) -> None:
+from tempoctrl.providers.gradient_sports.ingest import (
+    scan_tracking,
+    stage_tracking,
+)
 
-    df = stage_tracking(match_id)
-    print(df)
 
-def main():
-    matches = [i for i in range(10517, 10518)]
+def run_pipeline(match_id: int) -> pl.LazyFrame:
+    """Stage and lazily scan tracking data for one match."""
+    staged_path = stage_tracking(match_id)
+    return scan_tracking(staged_path)
 
-    for match_i in matches:
-        run_pipeline(match_i)
-    
+
+def main() -> None:
+    matches = range(10517, 10518)
+
+    for match_id in matches:
+        tracking = run_pipeline(match_id)
+        print("\n")
+        for column_name, dtype in tracking.collect_schema().items():
+            print(f"{column_name}: {dtype}")
+
 if __name__ == "__main__":
     main()
