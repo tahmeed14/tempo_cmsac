@@ -4,12 +4,21 @@ from tempoctrl.providers.gradient_sports.ingest import (
     scan_tracking,
     stage_tracking,
 )
+from tempoctrl.providers.gradient_sports.tracking_transform import (
+    rename_columns
+)
 
 
 def run_pipeline(match_id: int) -> pl.LazyFrame:
     """Stage and lazily scan tracking data for one match."""
     staged_path = stage_tracking(match_id)
-    return scan_tracking(staged_path)
+
+    df_out = (
+        scan_tracking(staged_path)
+        .pipe(rename_columns)
+    )
+
+    return df_out
 
 
 def main() -> None:
