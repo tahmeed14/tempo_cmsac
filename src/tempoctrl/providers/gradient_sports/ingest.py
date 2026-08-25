@@ -1,4 +1,5 @@
 import polars as pl
+import bz2
 
 def read_events(local_path : str) -> pl.DataFrame:
     """read and unnest events JSON for a single match.
@@ -17,6 +18,14 @@ def read_events(local_path : str) -> pl.DataFrame:
     df = pl.read_json(local_path, infer_schema_length = None)
     return df.with_row_index("event_number", offset = 1)
 
+
 def read_tracking(local_path : str) -> pl.DataFrame:
     # TODO: Implement tracking data reading logic
-    pass
+
+    with bz2.open(local_path, "rb") as file:
+        df = pl.read_ndjson(
+            file,
+            infer_schema_length=None
+        )
+     
+    return df

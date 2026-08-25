@@ -1,5 +1,3 @@
-import polars as pl
-
 from tempoctrl.providers.gradient_sports.ingest import read_events
 from tempoctrl.providers.gradient_sports.event_transform import (
     transform_events
@@ -10,7 +8,7 @@ from tempoctrl.providers.gradient_sports.event_features import (
 from tempoctrl.providers.gradient_sports.event_load import load_events
 
 
-def run_pipeline(match_id) -> None:
+def run_pipeline(match_id : int) -> None:
 
     local_path = f"data/raw/gradient_sports/events/{match_id}.json"
     out_path = "data/processed/gradient_sports/events/"
