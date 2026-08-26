@@ -124,12 +124,16 @@ def create_pass_outcome(df_in : pl.DataFrame) -> pl.DataFrame:
 def add_possession_player_features(df_in: pl.DataFrame) -> pl.DataFrame:
     """Add player-possession context features."""
 
-    return create_pass_outcome(
-        create_num_challenges(df_in = df_in)
+    return (
+        df_in.pipe(create_num_challenges)
+        .pipe(create_pass_outcome)
     )
 
-def event_features(df_in: pl.DataFrame) -> pl.DataFrame:
+def features_events(df_in: pl.DataFrame) -> pl.DataFrame:
     df_out = add_gamestate_features(df_in)
     df_out = add_possession_player_features(df_out)
 
-    return df_out
+    return (
+        df_in.pipe(add_gamestate_features)
+        .pipe(add_possession_player_features)
+    )
