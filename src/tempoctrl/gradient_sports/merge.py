@@ -66,3 +66,4 @@ def merge(match_id: int | str) -> pl.LazyFrame:
         suffix="_event",
         coalesce=True,
     )
+    
