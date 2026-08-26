@@ -54,7 +54,26 @@ PAUSE_EVENTS = ("SUB",
                 "END"
 )
 
+FINALIZE_ORDER = (
+        "gameid",
+        "pe_formattedgameclock",
+        "gamestate",
+        "ge_playername",
+        "ge_playerid",
+        "ge_teamname",
+        "ge_teamid",
+        "match_team_possession_id",
+        "match_team_player_possession_id",
+        "team_possession_start",
+        "event_number",
+        "ge_gameeventtype"
+        )
 
+FINALIZE_EXCLUDE = (
+    *FINALIZE_ORDER,
+    "ge_outtype", 
+    "ge_endtype",
+)
 
 TRANSITION_EVENTS = (
                     #WARNING: changing this will impact
@@ -426,15 +445,37 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
         game state variables.
     """
 
+    df_out = select_events_columns(df_in=df_in)
+    df_out = drop_pen_shootouts(df_in=df_out)
+    df_out = reclassify_ballheight(df_in=df_out)
+    df_out = reclassify_pressuretype(df_in=df_out)
+    df_out = reclassify_linesbrokentype(df_in=df_out)
+    df_out = reclassify_firsttouch(df_in=df_out)
+    df_out = rename_classes_setpieces(df_in=df_out)
+    df_out = add_possession_identifiers(df_in=df_out)
+
+    return df_out
+
+
+
+def finalize_events(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Select final event columns and remove source-struct prefixes.
+
+    Remove rows without a team-possession identifier, arrange the final
+    columns, and strip leading ``ge_`` and ``pe_`` prefixes from column
+    names.
+    """
     return (
-        df_in.pipe(select_events_columns)
-        .pipe(drop_pen_shootouts)
-        .pipe(reclassify_ballheight)
-        .pipe(reclassify_pressuretype)
-        .pipe(reclassify_linesbrokentype)
-        .pipe(reclassify_firsttouch)
-        .pipe(rename_classes_setpieces)
-        .pipe(add_possession_identifiers)
+        df_in.filter(pl.col("match_team_possession_id").is_not_null())
+        .select(
+            *FINALIZE_ORDER,
+            pl.exclude(*FINALIZE_ORDER, *FINALIZE_EXCLUDE),
+        )
+        .rename(
+            lambda column_name: (
+                column_name[3:]
+                if column_name.startswith(("ge_", "pe_"))
+                else column_name
+            )
+        )
     )
-
-

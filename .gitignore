@@ -5,12 +5,12 @@ data/
 *__pycache__*
 *.py[cod]
 
+# Docs
+env/
+
 notebooks/
 
 .DS_Store
 # Environment
 .venv/
 env/
-
-.pytest_cache/
-
