@@ -128,6 +128,35 @@ LINESBROKEN_MAPPER = {
     "MD" : "Midfield & Defense"
 }
 
+RENAME_MAPPER = {
+    "gameid": "game_id",
+    "gameeventid": "game_event_id",
+    "possessioneventid": "possession_event_id",
+    "ge_gameeventtype": "game_event_type",
+    "pe_possessioneventtype": "possession_event_type",
+}
+
+FINALIZE_ORDER = (
+    "game_id",
+    "formattedgameclock",
+    "gamestate",
+    "playername",
+    "playerid",
+    "teamname",
+    "teamid",
+    "match_team_possession_id",
+    "match_team_player_possession_id",
+    "team_possession_start",
+    "event_number",
+    "game_event_type",
+)
+
+FINALIZE_EXCLUDE = (
+    *FINALIZE_ORDER,
+    "outtype",
+    "endtype",
+)
+
 def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
     """Unnest selected event structs and return a flat DataFrame.
 
@@ -437,4 +466,39 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
         .pipe(add_possession_identifiers)
     )
 
+
+def rename_columns(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Rename event identifiers and event-type columns."""
+    return df_in.rename(RENAME_MAPPER)
+
+
+def remove_event_prefixes(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Remove leading game-event and possession-event prefixes."""
+    return df_in.rename(
+        lambda column_name: (
+            column_name[3:]
+            if column_name.startswith(("ge_", "pe_"))
+            else column_name
+        )
+    )
+
+
+def organize_event_columns(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Filter valid possessions and arrange final event columns."""
+    return (
+        df_in.filter(pl.col("match_team_possession_id").is_not_null())
+        .select(
+            *FINALIZE_ORDER,
+            pl.exclude(*FINALIZE_ORDER, *FINALIZE_EXCLUDE),
+        )
+    )
+
+
+def cleanup_events(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Rename, remove prefixes, and organize processed event data."""
+    return (
+        df_in.pipe(rename_columns)
+        .pipe(remove_event_prefixes)
+        .pipe(organize_event_columns)
+    )
 
