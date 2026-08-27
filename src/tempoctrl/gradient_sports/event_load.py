@@ -50,11 +50,14 @@ def remove_event_prefixes(df_in : pl.DataFrame) -> pl.DataFrame:
         )
     )
 
-# FIXME: 
+# FIXME: Maybe add to the top of the pipeline
 RENAME_MAPPER = {
     "gameid" : "game_id",
     "gameeventid" : "game_event_id",
-    "possessioneventid" : "possession_event_id"
+    "possessioneventid" : "possession_event_id",
+    "gameeventtype" : "game_event_type",
+    "possessioneventtype" : "possession_event_type"
+
     }
 
 def rename_columns(df_in : pl.DataFrame) -> pl.DataFrame:
@@ -73,7 +76,8 @@ def load_events(df_in: pl.DataFrame,
     """
 
     # polish
-    events_df = (df_in.pipe(order_event_columns)
+    events_df = (df_in
+                 .pipe(order_event_columns)
                  .pipe(remove_event_prefixes)
                  .pipe(rename_columns))
 
