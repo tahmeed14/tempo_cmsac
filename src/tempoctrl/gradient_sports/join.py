@@ -68,7 +68,7 @@ def merge(match_id: int | str) -> pl.LazyFrame:
 
     #FIXME: return in one go
     temp = df_tracking.join(
-        df_events,
+        df_events.filter(pl.col("possessioneventtype") != "IT"),
         on=JOIN_KEYS,
         how="left",
         suffix="_event",
