@@ -52,7 +52,7 @@ def create_match_scores(df_in: pl.DataFrame) -> pl.DataFrame:
             ``ge_hometeam``.
 
     Returns:
-        Event data with ``gamestate_goal_diff`` and ``gamestate``
+        Event data with ``game_state_goal_diff`` and ``game_state``
         columns.
     """
     home_goal_difference = pl.col("home_score") - pl.col("away_score")
@@ -65,20 +65,20 @@ def create_match_scores(df_in: pl.DataFrame) -> pl.DataFrame:
     )
 
     return df_in.with_columns(
-        goal_difference.alias("gamestate_goal_diff")
+        goal_difference.alias("game_state_goal_diff")
     ).with_columns(
-        pl.when(pl.col("gamestate_goal_diff") > 0)
+        pl.when(pl.col("game_state_goal_diff") > 0)
         .then(pl.lit("Winning"))
-        .when(pl.col("gamestate_goal_diff") == 0)
+        .when(pl.col("game_state_goal_diff") == 0)
         .then(pl.lit("Drawing"))
-        .when(pl.col("gamestate_goal_diff") < 0)
+        .when(pl.col("game_state_goal_diff") < 0)
         .then(pl.lit("Losing"))
         .otherwise(None)
-        .alias("gamestate")
+        .alias("game_state")
     )
 
 
-def add_gamestate_features(df_in: pl.DataFrame) -> pl.DataFrame:
+def add_game_state_features(df_in: pl.DataFrame) -> pl.DataFrame:
     """Add team score and game-state context to an events DataFrame.
 
     Calls `create_team_scores` and then `create_match_scores` to attach
@@ -130,10 +130,10 @@ def add_possession_player_features(df_in: pl.DataFrame) -> pl.DataFrame:
     )
 
 def features_events(df_in: pl.DataFrame) -> pl.DataFrame:
-    df_out = add_gamestate_features(df_in)
+    df_out = add_game_state_features(df_in)
     df_out = add_possession_player_features(df_out)
 
     return (
-        df_in.pipe(add_gamestate_features)
+        df_in.pipe(add_game_state_features)
         .pipe(add_possession_player_features)
     )

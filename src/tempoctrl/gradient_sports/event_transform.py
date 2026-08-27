@@ -54,8 +54,6 @@ PAUSE_EVENTS = ("SUB",
                 "END"
 )
 
-
-
 TRANSITION_EVENTS = (
                     #WARNING: changing this will impact
                     # create_team_possession_flag() 
@@ -134,16 +132,17 @@ RENAME_MAPPER = {
     "possessioneventid": "possession_event_id",
     "ge_gameeventtype": "game_event_type",
     "pe_possessioneventtype": "possession_event_type",
+    "ge_playerid" : "player_id",
+    "ge_teamid" : "team_id",
+
 }
 
 FINALIZE_ORDER = (
     "game_id",
     "formattedgameclock",
-    "gamestate",
-    "playername",
-    "playerid",
-    "teamname",
-    "teamid",
+    "game_state",
+    "player_id",
+    "team_id",
     "match_team_possession_id",
     "match_team_player_possession_id",
     "team_possession_start",
@@ -155,6 +154,8 @@ FINALIZE_EXCLUDE = (
     *FINALIZE_ORDER,
     "outtype",
     "endtype",
+    "duration",
+    "period"
 )
 
 def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
@@ -249,9 +250,7 @@ def reclassify_pressuretype(df_in : pl.DataFrame) -> pl.DataFrame:
         pl.col("it_initialpressuretype")
         .replace_strict(PRESSURE_MAPPER, default="No Pressure")
         .alias("first_touch_defender_pressure_type")
-        ).drop(["it_initialpressuretype", 
-                "pe_pressuretype"]
-    )
+    ).drop(["it_initialpressuretype", "pe_pressuretype"])
 
 
 def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
@@ -260,7 +259,7 @@ def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
         .replace_strict(BODYPART_MAPPER, default="N/A")
         .fill_null("Not available")
         .alias("first_touch_bodypart")
-        ).drop("it_initialbodytype")
+    ).drop("it_initialbodytype")
 
 
 def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
@@ -268,7 +267,8 @@ def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
         pl.col("pe_linesbrokentype")
         .replace_strict(LINESBROKEN_MAPPER, default = "None")
         .fill_null("None")
-    )
+        .alias("lines_broken_type")
+    ).drop("pe_linesbrokentype")
 
 
 def rename_classes_setpieces(df_in : pl.DataFrame) -> pl.DataFrame:
@@ -276,7 +276,8 @@ def rename_classes_setpieces(df_in : pl.DataFrame) -> pl.DataFrame:
         pl.col("ge_setpiecetype")
         .replace_strict(SETPIECE_MAPPER, default="N/A")
         .fill_null("Not available")
-    )
+        # .alias("set_piece_type")
+    )#.drop("ge_setpiecetype")
 
 # Identify possessions for teams & players
 def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
