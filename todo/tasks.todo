@@ -14,7 +14,8 @@ TODOs:
     ✔ tracking_transform 2 @started(26-08-25 18:17) @done(26-08-25 18:43) @lasted(26m36s)
     ✔ load.py @done(26-08-25 18:43)
     ✔ merge.py @done(26-08-25 19:24)
-    ☐ merge.py 2 
+    ✔ merge.py 2 @done(26-08-27 01:39)
+    ☐ join features
     ☐ adjust load_events.py based on findings from tracking
 
 
