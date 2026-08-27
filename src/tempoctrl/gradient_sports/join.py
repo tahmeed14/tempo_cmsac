@@ -11,7 +11,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-JOIN_KEYS = ("game_id", "game_event_id")
+JOIN_KEYS = ("game_id", "game_event_id", "possession_event_id")
 
 
 def _scan_processed_match(
@@ -48,7 +48,7 @@ def scan_tracking(match_id: int | str) -> pl.LazyFrame:
     return _scan_processed_match(match_id, "tracking")
 
 
-def merge(match_id: int | str) -> pl.LazyFrame:
+def possession_join(match_id: int | str) -> pl.LazyFrame:
     """Attach processed event data to every matching tracking frame.
 
     Keep all tracking rows and join events using ``game_id`` and
@@ -68,11 +68,13 @@ def merge(match_id: int | str) -> pl.LazyFrame:
 
     #FIXME: return in one go
     temp = df_tracking.join(
-        df_events.filter(pl.col("possessioneventtype") != "IT"),
+        df_events,#.filter(pl.col("possession_event_type") != "IT"),
         on=JOIN_KEYS,
         how="left",
         suffix="_event",
         coalesce=True,
+        nulls_equal=True,
+        validate="m:1"
     )
     logger.debug(temp.select(pl.len()).collect())
 
