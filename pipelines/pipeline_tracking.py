@@ -17,14 +17,12 @@ def run_pipeline(match_id: int) -> pl.LazyFrame:
 
     load_tracking(df_out, match_id, overwrite=True)
 
-    return df_out
-
 
 def main() -> None:
-    matches = range(10517, 10518)
+    matches = range(10514, 10518)
 
     for match_id in matches:
-        tracking = run_pipeline(match_id)
+        run_pipeline(match_id)
 
 if __name__ == "__main__":
     main()

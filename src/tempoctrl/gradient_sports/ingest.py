@@ -81,3 +81,6 @@ def scan_tracking(df_path: str | Path) -> pl.LazyFrame:
         A lazy tracking-data query for downstream transformations.
     """
     return pl.scan_parquet(df_path)
+
+def scan_integrated(df_path : str | Path) -> pl.LazyFrame:
+    return pl.scan_parquet(df_path + "*.parquet")

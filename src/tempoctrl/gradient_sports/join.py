@@ -79,3 +79,27 @@ def possession_join(match_id: int | str) -> pl.LazyFrame:
     logger.debug(temp.select(pl.len()).collect())
 
     return temp
+
+
+def possession_load(
+    match_id: int | str,
+    overwrite: bool = False,
+) -> None:
+    """Join and save integrated possession data for one match."""
+    output_path = Path(
+        f"data/integrated/gradient_sports/{match_id}.parquet"
+    )
+
+    if output_path.is_file() and not overwrite:
+        logger.info(
+            "Integrated possession file already exists: %s",
+            output_path,
+        )
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    possession_join(match_id).sink_parquet(
+        output_path,
+        compression="zstd",
+    )
+    logger.info("Wrote integrated possession file: %s", output_path)

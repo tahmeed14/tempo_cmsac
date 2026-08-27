@@ -33,7 +33,7 @@ def run_pipeline(match_id : int) -> None:
     
 
 def main():
-    matches = [i for i in range(10517, 10518)]
+    matches = [i for i in range(10514, 10518)]
 
     for match_i in matches:
         run_pipeline(match_i)
