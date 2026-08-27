@@ -54,8 +54,6 @@ PAUSE_EVENTS = ("SUB",
                 "END"
 )
 
-
-
 TRANSITION_EVENTS = (
                     #WARNING: changing this will impact
                     # create_team_possession_flag() 
@@ -127,6 +125,38 @@ LINESBROKEN_MAPPER = {
     "M" : "Midfield",
     "MD" : "Midfield & Defense"
 }
+
+RENAME_MAPPER = {
+    "gameid": "game_id",
+    "gameeventid": "game_event_id",
+    "possessioneventid": "possession_event_id",
+    "ge_gameeventtype": "game_event_type",
+    "pe_possessioneventtype": "possession_event_type",
+    "ge_playerid" : "player_id",
+    "ge_teamid" : "team_id",
+
+}
+
+FINALIZE_ORDER = (
+    "game_id",
+    "formattedgameclock",
+    "game_state",
+    "player_id",
+    "team_id",
+    "match_team_possession_id",
+    "match_team_player_possession_id",
+    "team_possession_start",
+    "event_number",
+    "game_event_type",
+)
+
+FINALIZE_EXCLUDE = (
+    *FINALIZE_ORDER,
+    "outtype",
+    "endtype",
+    "duration",
+    "period"
+)
 
 def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
     """Unnest selected event structs and return a flat DataFrame.
@@ -220,9 +250,7 @@ def reclassify_pressuretype(df_in : pl.DataFrame) -> pl.DataFrame:
         pl.col("it_initialpressuretype")
         .replace_strict(PRESSURE_MAPPER, default="No Pressure")
         .alias("first_touch_defender_pressure_type")
-        ).drop(["it_initialpressuretype", 
-                "pe_pressuretype"]
-    )
+    ).drop(["it_initialpressuretype", "pe_pressuretype"])
 
 
 def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
@@ -231,7 +259,7 @@ def reclassify_firsttouch(df_in : pl.DataFrame) -> pl.DataFrame:
         .replace_strict(BODYPART_MAPPER, default="N/A")
         .fill_null("Not available")
         .alias("first_touch_bodypart")
-        ).drop("it_initialbodytype")
+    ).drop("it_initialbodytype")
 
 
 def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
@@ -239,7 +267,8 @@ def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
         pl.col("pe_linesbrokentype")
         .replace_strict(LINESBROKEN_MAPPER, default = "None")
         .fill_null("None")
-    )
+        .alias("lines_broken_type")
+    ).drop("pe_linesbrokentype")
 
 
 def rename_classes_setpieces(df_in : pl.DataFrame) -> pl.DataFrame:
@@ -247,7 +276,8 @@ def rename_classes_setpieces(df_in : pl.DataFrame) -> pl.DataFrame:
         pl.col("ge_setpiecetype")
         .replace_strict(SETPIECE_MAPPER, default="N/A")
         .fill_null("Not available")
-    )
+        # .alias("set_piece_type")
+    )#.drop("ge_setpiecetype")
 
 # Identify possessions for teams & players
 def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
@@ -437,4 +467,39 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
         .pipe(add_possession_identifiers)
     )
 
+
+def rename_columns(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Rename event identifiers and event-type columns."""
+    return df_in.rename(RENAME_MAPPER)
+
+
+def remove_event_prefixes(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Remove leading game-event and possession-event prefixes."""
+    return df_in.rename(
+        lambda column_name: (
+            column_name[3:]
+            if column_name.startswith(("ge_", "pe_"))
+            else column_name
+        )
+    )
+
+
+def organize_event_columns(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Filter valid possessions and arrange final event columns."""
+    return (
+        df_in.filter(pl.col("match_team_possession_id").is_not_null())
+        .select(
+            *FINALIZE_ORDER,
+            pl.exclude(*FINALIZE_ORDER, *FINALIZE_EXCLUDE),
+        )
+    )
+
+
+def cleanup_events(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Rename, remove prefixes, and organize processed event data."""
+    return (
+        df_in.pipe(rename_columns)
+        .pipe(remove_event_prefixes)
+        .pipe(organize_event_columns)
+    )
 

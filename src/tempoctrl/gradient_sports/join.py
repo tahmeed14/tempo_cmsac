@@ -11,7 +11,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-JOIN_KEYS = ("game_id", "game_event_id")
+JOIN_KEYS = ("game_id", "game_event_id", "possession_event_id")
 
 
 def _scan_processed_match(
@@ -48,7 +48,7 @@ def scan_tracking(match_id: int | str) -> pl.LazyFrame:
     return _scan_processed_match(match_id, "tracking")
 
 
-def merge(match_id: int | str) -> pl.LazyFrame:
+def possession_join(match_id: int | str) -> pl.LazyFrame:
     """Attach processed event data to every matching tracking frame.
 
     Keep all tracking rows and join events using ``game_id`` and
@@ -68,12 +68,38 @@ def merge(match_id: int | str) -> pl.LazyFrame:
 
     #FIXME: return in one go
     temp = df_tracking.join(
-        df_events.filter(pl.col("possessioneventtype") != "IT"),
+        df_events,#.filter(pl.col("possession_event_type") != "IT"),
         on=JOIN_KEYS,
         how="left",
         suffix="_event",
         coalesce=True,
+        nulls_equal=True,
+        validate="m:1"
     )
     logger.debug(temp.select(pl.len()).collect())
 
     return temp
+
+
+def possession_load(
+    match_id: int | str,
+    overwrite: bool = False,
+) -> None:
+    """Join and save integrated possession data for one match."""
+    output_path = Path(
+        f"data/integrated/gradient_sports/{match_id}.parquet"
+    )
+
+    if output_path.is_file() and not overwrite:
+        logger.info(
+            "Integrated possession file already exists: %s",
+            output_path,
+        )
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    possession_join(match_id).sink_parquet(
+        output_path,
+        compression="zstd",
+    )
+    logger.info("Wrote integrated possession file: %s", output_path)
