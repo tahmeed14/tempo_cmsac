@@ -5,6 +5,12 @@ import polars as pl
 
 logger = logging.getLogger(__name__)
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 JOIN_KEYS = ("game_id", "game_event_id")
 
 
@@ -58,12 +64,16 @@ def merge(match_id: int | str) -> pl.LazyFrame:
         for column_name in JOIN_KEYS
     ]
     df_events = df_events.with_columns(event_key_casts)
+    logger.debug(df_tracking.select(pl.len()).collect())
 
-    return df_tracking.join(
+    #FIXME: return in one go
+    temp = df_tracking.join(
         df_events,
         on=JOIN_KEYS,
         how="left",
         suffix="_event",
         coalesce=True,
     )
-    
+    logger.debug(temp.select(pl.len()).collect())
+
+    return temp
