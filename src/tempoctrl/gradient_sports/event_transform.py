@@ -281,6 +281,23 @@ def rename_classes_setpieces(df_in : pl.DataFrame) -> pl.DataFrame:
         # .alias("set_piece_type")
     )#.drop("ge_setpiecetype")
 
+def drop_foul_events(df_in: pl.DataFrame) -> pl.DataFrame:
+    """Drop supplemental ``FOUL`` game-event rows.
+
+    Gradient Sports describes this as follows: When multiple
+    infringements occur in an event, they are added separately.
+    For example, an on-the-ball foul followed by a yellow card
+    for dissent are added as two separate fouls. The main foul
+    is added on the possession event where it happened, and
+    additional fouls are added as a separate row after the next
+    OUT events. Additional fouls have gameEventId "FOUL" and
+    possessionEventId "FO" even though technically they are not
+    separate events.
+
+    Null and all other game-event types are retained.
+    """
+    return df_in.filter(pl.col("ge_gameeventtype").ne_missing("FOUL"))
+
 # Identify possessions for teams & players
 def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
     """Flag rows where a new team possession begins.
@@ -518,6 +535,7 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
     return (
         df_in.pipe(select_events_columns)
         .pipe(drop_pen_shootouts)
+        .pipe(drop_foul_events)
         .pipe(reclassify_ballheight)
         .pipe(reclassify_pressuretype)
         .pipe(reclassify_linesbrokentype)
@@ -554,11 +572,11 @@ def organize_event_columns(df_in: pl.DataFrame) -> pl.DataFrame:
         )
     )
 
-
 def cleanup_events(df_in: pl.DataFrame) -> pl.DataFrame:
     """Rename, remove prefixes, and organize processed event data."""
     return (
-        df_in.pipe(rename_columns)
+        df_in
+        .pipe(rename_columns)
         .pipe(remove_event_prefixes)
         .pipe(organize_event_columns)
     )
