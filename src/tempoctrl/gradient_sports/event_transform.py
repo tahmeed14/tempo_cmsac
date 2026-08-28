@@ -284,9 +284,9 @@ def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
     """Flag rows where a new team possession begins.
 
     Identify possession changes independently within each game. A team
-    change, dead-ball set piece, or game-pause event starts a possession.
-    Null values do not trigger possession starts. The first row of every
-    game is always flagged explicitly.
+    change, dead-ball set piece, game-pause event, or event following an
+    ``OUT`` starts a possession. Null values do not trigger possession
+    starts. The first row of every game is always flagged explicitly.
 
     Args:
         df_in: Event data containing ``ge_teamid``, ``gameid``,
@@ -304,6 +304,9 @@ def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
         DEAD_BALL_SET_PIECE_TYPES
     )
     game_paused = pl.col("ge_gameeventtype").is_in(PAUSE_EVENTS)
+    previous_event_was_out = (
+        pl.col("ge_gameeventtype").shift().over("gameid") == "OUT"
+    )
     first_event = (pl.col("ge_gameeventtype")
                    .is_in(TRANSITION_EVENTS[0:4])
     )
@@ -312,6 +315,7 @@ def create_team_possession_flag(df_in: pl.DataFrame) -> pl.DataFrame:
         team_changed
         | dead_ball_started
         | game_paused
+        | previous_event_was_out
     ).fill_null(False)
 
     return df_in.with_columns(
@@ -502,4 +506,3 @@ def cleanup_events(df_in: pl.DataFrame) -> pl.DataFrame:
         .pipe(remove_event_prefixes)
         .pipe(organize_event_columns)
     )
-
