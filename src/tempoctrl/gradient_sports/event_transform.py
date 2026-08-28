@@ -139,6 +139,8 @@ RENAME_MAPPER = {
 
 FINALIZE_ORDER = (
     "game_id",
+    "game_event_id",
+    "possession_event_id",
     "formattedgameclock",
     "game_state",
     "player_id",
