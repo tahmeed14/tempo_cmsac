@@ -12,6 +12,34 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 JOIN_KEYS = ("game_id", "game_event_id", "possession_event_id")
+JOIN_ISSUES_DIR = Path("data/investigate/join_issues")
+JOIN_KEY_COUNT_COLUMN = "join_key_count"
+
+
+def _save_duplicate_event_join_rows(
+    df_events: pl.LazyFrame,
+    match_id: int | str,
+) -> Path | None:
+    """Save event rows that violate the many-to-one join requirement."""
+    duplicate_rows = (
+        df_events.with_columns(
+            pl.len().over(JOIN_KEYS).alias(JOIN_KEY_COUNT_COLUMN)
+        )
+        .filter(pl.col(JOIN_KEY_COUNT_COLUMN) > 1)
+        .collect()
+    )
+    if duplicate_rows.is_empty():
+        return None
+
+    JOIN_ISSUES_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = JOIN_ISSUES_DIR / f"{match_id}_duplicate_event_rows.parquet"
+    duplicate_rows.write_parquet(output_path, compression="zstd")
+    logger.error(
+        "Saved %d duplicate event join rows to %s",
+        duplicate_rows.height,
+        output_path,
+    )
+    return output_path
 
 
 def _scan_processed_match(
@@ -66,17 +94,26 @@ def possession_join(match_id: int | str) -> pl.LazyFrame:
     df_events = df_events.with_columns(event_key_casts)
     logger.debug(df_tracking.select(pl.len()).collect())
 
-    #FIXME: return in one go
     temp = df_tracking.join(
-        df_events,#.filter(pl.col("possession_event_type") != "IT"),
+        df_events,
         on=JOIN_KEYS,
         how="left",
         suffix="_event",
         coalesce=True,
         nulls_equal=True,
-        validate="m:1"
+        validate="m:1",
     )
-    logger.debug(temp.select(pl.len()).collect())
+    try:
+        logger.debug(temp.select(pl.len()).collect())
+    except pl.exceptions.ComputeError:
+        try:
+            _save_duplicate_event_join_rows(df_events, match_id)
+        except Exception:
+            logger.exception(
+                "Could not save join-validation diagnostics for match %s",
+                match_id,
+            )
+        raise
 
     return temp
 
