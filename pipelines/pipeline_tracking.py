@@ -7,6 +7,7 @@ from tempoctrl.gradient_sports.ingest import (
 from tempoctrl.gradient_sports.tracking_transform import transform_tracking
 from tempoctrl.gradient_sports.tracking_load import load_tracking
 
+overwrite = True
 
 def run_pipeline(match_id: int) -> pl.LazyFrame:
 

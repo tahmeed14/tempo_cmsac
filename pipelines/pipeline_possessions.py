@@ -20,7 +20,7 @@ def run_pipeline() -> pl.LazyFrame:
         scan_integrated(
             df_path="data/integrated/gradient_sports",
         )
-        .pipe(transform_possessions)
+        # .pipe(transform_possessions)
     )
 
 
