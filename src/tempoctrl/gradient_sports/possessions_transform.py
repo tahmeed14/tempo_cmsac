@@ -54,6 +54,9 @@ def validate_possession_columns(df_in: pl.LazyFrame) -> pl.LazyFrame:
 
     return df_in
 
+def sort_frames(df_in: pl.LazyFrame) -> pl.LazyFrame:
+    return df_in.sort(SORT_COLUMNS)
+
 def _bounded_possession_id(poss_col: str) -> pl.Expr:
     """Build an expression that fills bounded IDs within each game."""
     possession_id = pl.col(poss_col)
@@ -65,7 +68,6 @@ def _bounded_possession_id(poss_col: str) -> pl.Expr:
         .otherwise(possession_id)
         .alias(f"dev_{poss_col}")
     )
-
 
 def fill_bounded_possessions_id(df: pl.LazyFrame,
                                 poss_col: str | Sequence[str]) -> pl.LazyFrame:
@@ -79,21 +81,67 @@ def fill_bounded_possessions_id(df: pl.LazyFrame,
     possession_columns = (
         (poss_col,) if isinstance(poss_col, str) else poss_col
     )
-    return df.sort(SORT_COLUMNS).with_columns(
+    return df.with_columns(
         *(
             _bounded_possession_id(column)
             for column in possession_columns
         )
     )
 
+def _successful_delivery_flag(poss_col : str) -> pl.Expr:
+    possession_id = pl.col(poss_col)
+
+    delivery_flag_id = (
+        pl.when(
+            possession_id.is_not_null()
+            & pl.col("successful_pass_or_cross").fill_null(False)
+        )
+        .then(possession_id)
+        .otherwise(None)
+        .forward_fill()
+        .over("game_id")
+    )
+
+    current_possession_id = (
+        possession_id
+        .forward_fill()
+        .over("game_id")
+    )
+
+    return (
+        pl.when(possession_id.is_not_null())
+        .then(possession_id)
+        .when(
+            delivery_flag_id.is_not_null()
+            & (current_possession_id == delivery_flag_id)
+        )
+        .then(delivery_flag_id)
+        .otherwise(None)
+        .alias(f"dev_{poss_col}")
+    )
+
+def propogate_successful_delivery_possession(
+        df_in : pl.LazyFrame,
+    ) -> pl.LazyFrame:
+    """Propogate `match_team_player_possession_id` through subsequent 
+    frames after a successful delivery (pass or cross). Propagation of 
+    the id stops when a different ID is encountered"""
+
+    return df_in.with_columns(
+            _successful_delivery_flag("match_team_player_possession_id")
+        )
+
+
 
 def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
     """Validate possession data and fill bounded possession ID gaps."""
     return (df_in
+            .pipe(sort_frames)
             .pipe(validate_possession_columns)
             .pipe(fill_bounded_possessions_id,
                   ("match_team_possession_id", 
                    "match_team_player_possession_id"
                    )
             )
+            .pipe(propogate_successful_delivery_possession)
     )

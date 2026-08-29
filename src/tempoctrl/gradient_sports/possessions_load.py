@@ -49,3 +49,5 @@ def possessions_load(df_path : str,
         .sink_parquet(f"data/model/{output_name}",
                       compression="zstd")
     )
+
+
