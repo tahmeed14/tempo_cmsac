@@ -16,7 +16,19 @@ JOIN_ISSUES_DIR = Path("data/investigate/join_issues")
 JOIN_KEY_COUNT_COLUMN = "join_key_count"
 
 #FIXME:
-DROP_COLUMNS = ("attacking_team_direction",)
+KEEP_EVENT_COLUMNS = (
+    *JOIN_KEYS,
+    "match_team_possession_id",
+    "match_team_player_possession_id",
+    "team_possession_start",
+    "player_id",
+    "team_id",
+    "setpiecetype",
+    "event_number",
+    "game_event_type",
+    "possession_event_type",
+    "successful_pass_or_cross",
+)
 
 def _save_duplicate_event_join_rows(
     df_events: pl.LazyFrame,
@@ -85,10 +97,10 @@ def possession_join(match_id: int | str) -> pl.LazyFrame:
     ``game_event_id``. Event join keys are cast to the corresponding
     tracking dtypes because the event dataset is substantially smaller.
     """
-    df_events = scan_events(match_id)
-    df_events = df_events.drop(
-        *DROP_COLUMNS
-    )
+    df_events = scan_events(match_id).select(KEEP_EVENT_COLUMNS)
+    # df_events = df_events.(
+    #     *DROP_COLUMNS
+    # )
 
     df_tracking = scan_tracking(match_id)
 
