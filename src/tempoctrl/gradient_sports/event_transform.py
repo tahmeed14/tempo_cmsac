@@ -134,6 +134,7 @@ RENAME_MAPPER = {
     "pe_possessioneventtype": "possession_event_type",
     "ge_playerid" : "player_id",
     "ge_teamid" : "team_id",
+    "teamattackingdirection" : "attacking_team_direction"
 
 }
 
