@@ -1,41 +1,26 @@
-import logging
 from collections.abc import Sequence
 
 import polars as pl
 
-logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-
-POSSESSION_KEYS = (
-    "game_id",
+POSSESSION_COLUMNS = (
     "match_team_possession_id",
     "match_team_player_possession_id",
 )
 
 REQUIRED_COLUMNS = (
-    *POSSESSION_KEYS,
-    "period",
+    "game_id",
     "framenum",
-    "event_number",
-    "possession_event_id",
-    "possession_event_type",
+    *POSSESSION_COLUMNS,
     "successful_pass_or_cross",
-    "balls_smooth",
-    "player_id",
-    "playername",
-    "team_id",
-    "teamname",
-    "hometeam",
 )
 
 SORT_COLUMNS = (
     "game_id",
     "framenum",
 )
+
+_CURRENT_POSSESSION_COLUMN = "__current_player_possession_id"
+_SUCCESSFUL_DELIVERY_COLUMN = "__successful_delivery_possession_id"
 
 
 def validate_possession_columns(df_in: pl.LazyFrame) -> pl.LazyFrame:
@@ -54,8 +39,6 @@ def validate_possession_columns(df_in: pl.LazyFrame) -> pl.LazyFrame:
 
     return df_in
 
-def sort_frames(df_in: pl.LazyFrame) -> pl.LazyFrame:
-    return df_in.sort(SORT_COLUMNS)
 
 def _bounded_possession_id(poss_col: str) -> pl.Expr:
     """Build an expression that fills bounded IDs within each game."""
@@ -69,79 +52,109 @@ def _bounded_possession_id(poss_col: str) -> pl.Expr:
         .alias(f"dev_{poss_col}")
     )
 
-def fill_bounded_possessions_id(df: pl.LazyFrame,
-                                poss_col: str | Sequence[str]) -> pl.LazyFrame:
+
+def fill_bounded_possessions_id(
+    df: pl.LazyFrame,
+    poss_col: str | Sequence[str],
+) -> pl.LazyFrame:
     """Fill bounded null IDs in one or more possession columns.
 
     Leading nulls, trailing nulls, and gaps bounded by different IDs are
     left unchanged. The source column is preserved and the filled values
     are written to columns prefixed with ``dev_``. Multiple columns are
-    accepted so callers can sort the input only once.
+    accepted so callers can sort the input only once. Duplicate rows for
+    a frame share their single non-null possession annotation.
     """
     possession_columns = (
         (poss_col,) if isinstance(poss_col, str) else poss_col
     )
-    return df.with_columns(
-        *(
-            _bounded_possession_id(column)
-            for column in possession_columns
+    frame_columns = {
+        column: f"__frame_{column}"
+        for column in possession_columns
+    }
+    return (
+        df.sort(SORT_COLUMNS)
+        .with_columns(
+            *(
+                pl.col(column)
+                .drop_nulls()
+                .first()
+                .over(SORT_COLUMNS)
+                .alias(frame_column)
+                for column, frame_column in frame_columns.items()
+            )
         )
+        .with_columns(
+            *(
+                _bounded_possession_id(frame_column).alias(
+                    f"dev_{column}"
+                )
+                for column, frame_column in frame_columns.items()
+            )
+        )
+        .drop(*frame_columns.values())
     )
 
-def _successful_delivery_flag(poss_col : str) -> pl.Expr:
-    possession_id = pl.col(poss_col)
 
-    delivery_flag_id = (
+def _successful_delivery_id(poss_col: str) -> pl.Expr:
+    """Track the latest successful delivery possession in each game."""
+    possession_id = pl.col(poss_col)
+    return (
         pl.when(
             possession_id.is_not_null()
             & pl.col("successful_pass_or_cross").fill_null(False)
         )
         .then(possession_id)
-        .otherwise(None)
         .forward_fill()
         .over("game_id")
+        .alias(_SUCCESSFUL_DELIVERY_COLUMN)
     )
 
-    current_possession_id = (
-        possession_id
-        .forward_fill()
-        .over("game_id")
+
+def propagate_successful_delivery_possession(
+    df_in: pl.LazyFrame,
+) -> pl.LazyFrame:
+    """Propagate a successful delivery until another possession starts.
+
+    Existing bounded-gap fills are retained. An unbounded null receives
+    the successful player's possession ID only while that ID remains the
+    latest observed player possession in the game.
+    """
+    possession_column = "match_team_player_possession_id"
+    development_column = f"dev_{possession_column}"
+    possession_id = pl.col(possession_column)
+    delivery_is_active = (
+        pl.col(_CURRENT_POSSESSION_COLUMN)
+        == pl.col(_SUCCESSFUL_DELIVERY_COLUMN)
+    )
+    propagated_id = pl.when(delivery_is_active).then(
+        pl.col(_SUCCESSFUL_DELIVERY_COLUMN)
     )
 
     return (
-        pl.when(possession_id.is_not_null())
-        .then(possession_id)
-        .when(
-            delivery_flag_id.is_not_null()
-            & (current_possession_id == delivery_flag_id)
+        df_in.with_columns(
+            possession_id.forward_fill()
+            .over("game_id")
+            .alias(_CURRENT_POSSESSION_COLUMN),
+            _successful_delivery_id(possession_column),
         )
-        .then(delivery_flag_id)
-        .otherwise(None)
-        .alias(f"dev_{poss_col}")
+        .with_columns(
+            pl.coalesce(
+                pl.col(development_column),
+                propagated_id,
+            ).alias(development_column)
+        )
+        .drop(
+            _CURRENT_POSSESSION_COLUMN,
+            _SUCCESSFUL_DELIVERY_COLUMN,
+        )
     )
-
-def propogate_successful_delivery_possession(
-        df_in : pl.LazyFrame,
-    ) -> pl.LazyFrame:
-    """Propogate `match_team_player_possession_id` through subsequent 
-    frames after a successful delivery (pass or cross). Propagation of 
-    the id stops when a different ID is encountered"""
-
-    return df_in.with_columns(
-            _successful_delivery_flag("match_team_player_possession_id")
-        )
-
 
 
 def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
-    """Validate possession data and fill bounded possession ID gaps."""
-    return (df_in
-            .pipe(sort_frames)
-            .pipe(validate_possession_columns)
-            .pipe(fill_bounded_possessions_id,
-                  ("match_team_possession_id", 
-                   "match_team_player_possession_id"
-                   )
-            )
-            .pipe(propogate_successful_delivery_possession)
+    """Fill bounded gaps and extend successful player deliveries."""
+    return (
+        df_in.pipe(validate_possession_columns)
+        .pipe(fill_bounded_possessions_id, POSSESSION_COLUMNS)
+        .pipe(propagate_successful_delivery_possession)
     )
