@@ -27,6 +27,10 @@ FINALIZE_ORDER = (
     "game_event_type",
     "framenum",
     "formattedgameclock",
+    "is_synthetic_pass_end",
+    "balls_smooth",
+    "away_players_smooth",
+    "home_players_smooth"
 
     # "effective_match_team_possession_id",
     # "effective_match_team_player_possession_id",

@@ -7,13 +7,21 @@ POSSESSION_COLUMNS = (
     "match_team_player_possession_id",
 )
 
+TRACKING_COLUMNS = (
+    "balls_smooth",
+    "away_players_smooth",
+    "home_players_smooth",
+)
+
 REQUIRED_COLUMNS = (
     "game_id",
     "framenum",
     *POSSESSION_COLUMNS,
+    *TRACKING_COLUMNS,
     "successful_pass_or_cross",
 )
 
+#FIXME: should we add period?
 SORT_COLUMNS = (
     "game_id",
     "framenum",
@@ -21,6 +29,7 @@ SORT_COLUMNS = (
 
 _CURRENT_POSSESSION_COLUMN = "__current_player_possession_id"
 _SUCCESSFUL_DELIVERY_COLUMN = "__successful_delivery_possession_id"
+SYNTHETIC_PASS_END_COLUMN = "is_synthetic_pass_end"
 
 
 def validate_possession_columns(df_in: pl.LazyFrame) -> pl.LazyFrame:
@@ -151,10 +160,135 @@ def propagate_successful_delivery_possession(
     )
 
 
+def create_synthetic_final_pass_frame(
+    df_in: pl.LazyFrame,
+) -> pl.LazyFrame:
+    """Add a passer row at each successful delivery's receiver frame.
+
+    The synthetic row carries the passer's derived possession IDs and
+    the receiver frame's tracking state. All other source fields are
+    null. Exactly one row is created per delivery boundary, even when a
+    frame has duplicate source rows.
+    """
+    schema = df_in.collect_schema()
+    development_team = "dev_match_team_possession_id"
+    development_player = "dev_match_team_player_possession_id"
+    required_columns = (
+        "game_id",
+        "framenum",
+        "match_team_player_possession_id",
+        development_team,
+        development_player,
+        "successful_pass_or_cross",
+        *TRACKING_COLUMNS,
+    )
+    missing_columns = [
+        column for column in required_columns if column not in schema
+    ]
+    if missing_columns:
+        missing = ", ".join(missing_columns)
+        raise ValueError(f"Missing synthetic pass columns: {missing}")
+
+    receiver_player = "__receiver_player_possession_id"
+    frame_player = "__frame_player_possession_id"
+    frame_team = "__frame_team_possession_id"
+    successful_player = "__successful_player_possession_id"
+    previous_player = "__previous_player_possession_id"
+    previous_team = "__previous_team_possession_id"
+    previous_success = "__previous_successful_player_possession_id"
+
+    frame_state = (
+        df_in.group_by(SORT_COLUMNS)
+        .agg(
+            pl.col("match_team_player_possession_id")
+            .drop_nulls()
+            .first()
+            .alias(receiver_player),
+            pl.col(development_player)
+            .drop_nulls()
+            .first()
+            .alias(frame_player),
+            pl.col(development_team)
+            .drop_nulls()
+            .first()
+            .alias(frame_team),
+            pl.col("match_team_player_possession_id")
+            .filter(
+                pl.col("successful_pass_or_cross").fill_null(False)
+            )
+            .drop_nulls()
+            .first()
+            .alias(successful_player),
+            *(
+                pl.col(column).drop_nulls().first().alias(column)
+                for column in TRACKING_COLUMNS
+            ),
+        )
+        .with_columns(
+            pl.col(frame_player)
+            .shift(1)
+            .over("game_id", order_by="framenum")
+            .alias(previous_player),
+            pl.col(frame_team)
+            .shift(1)
+            .over("game_id", order_by="framenum")
+            .alias(previous_team),
+            pl.col(successful_player)
+            .forward_fill()
+            .shift(1)
+            .over("game_id", order_by="framenum")
+            .alias(previous_success),
+        )
+    )
+    delivery_boundaries = frame_state.filter(
+        pl.col(receiver_player).is_not_null()
+        & pl.col(previous_player).is_not_null()
+        & (pl.col(receiver_player) != pl.col(previous_player))
+        & (pl.col(previous_success) == pl.col(previous_player))
+    )
+
+    synthetic_values = {
+        "game_id": pl.col("game_id"),
+        "framenum": pl.col("framenum"),
+        development_team: pl.col(previous_team),
+        development_player: pl.col(previous_player),
+        **{column: pl.col(column) for column in TRACKING_COLUMNS},
+    }
+    source_schema = {
+        column: dtype
+        for column, dtype in schema.items()
+        if column != SYNTHETIC_PASS_END_COLUMN
+    }
+    synthetic_rows = delivery_boundaries.select(
+        *(
+            synthetic_values.get(
+                column,
+                pl.lit(None, dtype=dtype),
+            )
+            .cast(dtype)
+            .alias(column)
+            for column, dtype in source_schema.items()
+        ),
+        pl.lit(True).alias(SYNTHETIC_PASS_END_COLUMN),
+    )
+    original_rows = df_in.select(*source_schema).with_columns(
+        pl.lit(False).alias(SYNTHETIC_PASS_END_COLUMN)
+    )
+
+    return pl.concat(
+        [original_rows, synthetic_rows],
+        how="vertical",
+    ).sort(
+        [*SORT_COLUMNS, SYNTHETIC_PASS_END_COLUMN],
+        descending=[False, False, True],
+    )
+
+
 def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
     """Fill bounded gaps and extend successful player deliveries."""
     return (
         df_in.pipe(validate_possession_columns)
         .pipe(fill_bounded_possessions_id, POSSESSION_COLUMNS)
         .pipe(propagate_successful_delivery_possession)
+        .pipe(create_synthetic_final_pass_frame)
     )
