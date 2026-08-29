@@ -5,6 +5,7 @@ from tempoctrl.gradient_sports.ingest import scan_integrated
 from tempoctrl.gradient_sports.possessions_transform import (
     transform_possessions,
 )
+from tempoctrl.gradient_sports.possessions_load import possessions_load
 
 logger = logging.getLogger(__name__)
 
@@ -14,20 +15,13 @@ logging.basicConfig(
 )
 
 
-def run_pipeline() -> pl.LazyFrame:
-    """Lazily load and transform integrated possession data."""
-    return (
-        scan_integrated(
-            df_path="data/integrated/gradient_sports",
-        )
-        # .pipe(transform_possessions)
-    )
+def run_pipeline(df_path : str,) -> None:
+    possessions_load(df_path=df_path,
+                     output_name="dev.parquet")    
 
 
 def main() -> None:
-    integrated_df = run_pipeline()
-    print(integrated_df.collect_schema())
-
+    run_pipeline(df_path="data/integrated/gradient_sports")
 
 if __name__ == "__main__":
     main()
