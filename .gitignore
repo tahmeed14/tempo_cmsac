@@ -16,3 +16,5 @@ env/
 
 # dev scripts
 *dev*.py
+
+todo/

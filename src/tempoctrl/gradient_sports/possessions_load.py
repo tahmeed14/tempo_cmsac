@@ -17,7 +17,21 @@ FINALIZE_ORDER = (
     "game_id",
     "game_event_id",
     "possession_event_id",
-    "framenum"
+    "possession_event",
+    "framenum",
+    "formattedgameclock",
+    "match_team_possession_id",
+    "match_team_player_possession_id",
+    "possession_event_type",
+    "successful_pass_or_cross",
+    "player_id",
+    "effective_match_team_possession_id",
+    "effective_match_team_player_possession_id",
+    "player_possession_id_imputed",
+    "possession_id_imputation_reason",
+    "is_synthetic_deliver_end",
+    # "delivery_"
+    
 )
 
 def possessions_load(df_path : str,
@@ -28,6 +42,7 @@ def possessions_load(df_path : str,
             df_path=df_path,
         )
         .pipe(transform_possessions)
+        .select(FINALIZE_ORDER)
         .sink_parquet(f"data/model/{output_name}",
                       compression="zstd")
     )
