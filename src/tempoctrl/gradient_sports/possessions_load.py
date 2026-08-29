@@ -14,22 +14,25 @@ logging.basicConfig(
 )
 
 FINALIZE_ORDER = (
+    "match_team_possession_id",
+    "match_team_player_possession_id",
+    "dev_match_team_player_possession_id",
+    "dev_match_team_possession_id",
     "game_id",
     "game_event_id",
     "possession_event_id",
-    "possession_event",
-    "framenum",
-    "formattedgameclock",
-    "match_team_possession_id",
-    "match_team_player_possession_id",
     "possession_event_type",
     "successful_pass_or_cross",
     "player_id",
-    "effective_match_team_possession_id",
-    "effective_match_team_player_possession_id",
-    "player_possession_id_imputed",
-    "possession_id_imputation_reason",
-    "is_synthetic_deliver_end",
+    "game_event_type",
+    "framenum",
+    "formattedgameclock",
+
+    # "effective_match_team_possession_id",
+    # "effective_match_team_player_possession_id",
+    # "player_possession_id_imputed",
+    # "possession_id_imputation_reason",
+    # "is_synthetic_deliver_end",
     # "delivery_"
     
 )
