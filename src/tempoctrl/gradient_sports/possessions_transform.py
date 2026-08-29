@@ -1,6 +1,9 @@
 from collections.abc import Sequence
+from pathlib import Path
 
 import polars as pl
+
+from tempoctrl.gradient_sports.ingest import scan_processed_files
 
 POSSESSION_COLUMNS = (
     "match_team_possession_id",
@@ -25,6 +28,11 @@ REQUIRED_COLUMNS = (
 SORT_COLUMNS = (
     "game_id",
     "framenum",
+)
+
+ATTACKING_DIRECTION_COLUMNS = (
+    'match_team_possession_id',
+    'attacking_team_direction',
 )
 
 _CURRENT_POSSESSION_COLUMN = "__current_player_possession_id"
@@ -283,6 +291,20 @@ def create_synthetic_final_pass_frame(
         descending=[False, False, True],
     )
 
+def append_attacking_direction(df_in : pl.LazyFrame) -> pl.LazyFrame:
+    path_events = Path("data/processed/gradient_sports/events/")
+    df_events = scan_processed_files(path_events,
+                                     columns=ATTACKING_DIRECTION_COLUMNS)
+
+    return df_in.join(
+        df_events.drop_nulls().unique(),
+        left_on = "dev_match_team_possession_id",
+        right_on = "match_team_possession_id",
+        how = "left",
+        suffix="_event",
+        coalesce=True,
+        validate="m:1"
+    )
 
 def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
     """Fill bounded gaps and extend successful player deliveries."""
@@ -291,4 +313,5 @@ def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
         .pipe(fill_bounded_possessions_id, POSSESSION_COLUMNS)
         .pipe(propagate_successful_delivery_possession)
         .pipe(create_synthetic_final_pass_frame)
+        .pipe(append_attacking_direction)
     )

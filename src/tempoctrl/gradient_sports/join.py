@@ -15,6 +15,8 @@ JOIN_KEYS = ("game_id", "game_event_id", "possession_event_id")
 JOIN_ISSUES_DIR = Path("data/investigate/join_issues")
 JOIN_KEY_COUNT_COLUMN = "join_key_count"
 
+#FIXME:
+DROP_COLUMNS = ("attacking_team_direction",)
 
 def _save_duplicate_event_join_rows(
     df_events: pl.LazyFrame,
@@ -84,6 +86,10 @@ def possession_join(match_id: int | str) -> pl.LazyFrame:
     tracking dtypes because the event dataset is substantially smaller.
     """
     df_events = scan_events(match_id)
+    df_events = df_events.drop(
+        *DROP_COLUMNS
+    )
+
     df_tracking = scan_tracking(match_id)
 
     tracking_schema = df_tracking.collect_schema()
@@ -94,7 +100,7 @@ def possession_join(match_id: int | str) -> pl.LazyFrame:
     df_events = df_events.with_columns(event_key_casts)
     logger.debug(df_tracking.select(pl.len()).collect())
 
-    temp = df_tracking.join(
+    df_out = df_tracking.join(
         df_events,
         on=JOIN_KEYS,
         how="left",
@@ -104,7 +110,7 @@ def possession_join(match_id: int | str) -> pl.LazyFrame:
         validate="m:1",
     )
     try:
-        logger.debug(temp.select(pl.len()).collect())
+        logger.debug(df_out.select(pl.len()).collect())
     except pl.exceptions.ComputeError:
         try:
             _save_duplicate_event_join_rows(df_events, match_id)
@@ -115,7 +121,7 @@ def possession_join(match_id: int | str) -> pl.LazyFrame:
             )
         raise
 
-    return temp
+    return df_out
 
 
 def possession_load(
