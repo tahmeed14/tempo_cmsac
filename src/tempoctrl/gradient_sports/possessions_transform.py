@@ -4,6 +4,10 @@ from pathlib import Path
 import polars as pl
 
 from tempoctrl.gradient_sports.ingest import scan_processed_files
+from tempoctrl.gradient_sports.interpolations import (
+    interpolate_ball_coordinates,
+)
+
 
 POSSESSION_COLUMNS = (
     "match_team_possession_id",
@@ -356,7 +360,7 @@ def label_pitch_thirds(df_in: pl.LazyFrame) -> pl.LazyFrame:
             closed="both",
         ).fill_null(False)
     )
-    
+
     pitch_third = (
         pl.when(~valid_coordinate)
         .then(pl.lit(None, dtype=PITCH_THIRD_DTYPE))
@@ -379,5 +383,6 @@ def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
         .pipe(create_synthetic_final_pass_frame)
         .pipe(append_attacking_direction)
         .pipe(normalize_ball_coordinates)
+        .pipe(interpolate_ball_coordinates)
         .pipe(label_pitch_thirds)
     )
