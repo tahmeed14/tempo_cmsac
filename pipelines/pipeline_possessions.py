@@ -1,7 +1,6 @@
 import polars as pl
 import logging
 
-from tempoctrl.gradient_sports.ingest import scan_integrated
 from tempoctrl.gradient_sports.possessions_transform import (
     transform_possessions,
 )

@@ -4,7 +4,7 @@ import logging
 from tempoctrl.gradient_sports.possessions_transform import (
     transform_possessions
 )
-from tempoctrl.gradient_sports.ingest import scan_integrated
+from tempoctrl.gradient_sports.ingest import scan_processed_files
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +24,12 @@ FINALIZE_ORDER = (
     "possession_event_type",
     "successful_pass_or_cross",
     "player_id",
+    "attacking_team_direction",
     "game_event_type",
     "framenum",
     "formattedgameclock",
     "is_synthetic_pass_end",
+    "pitch_third",
     "balls_smooth",
     "away_players_smooth",
     "home_players_smooth"
@@ -45,7 +47,7 @@ def possessions_load(df_path : str,
                      output_name : str) -> pl.LazyFrame:
     """Lazily load and transform integrated possession data."""
     return (
-        scan_integrated(
+        scan_processed_files(
             df_path=df_path,
         )
         .pipe(transform_possessions)

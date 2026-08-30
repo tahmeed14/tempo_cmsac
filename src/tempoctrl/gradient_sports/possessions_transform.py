@@ -1,6 +1,13 @@
 from collections.abc import Sequence
+from pathlib import Path
 
 import polars as pl
+
+from tempoctrl.gradient_sports.ingest import scan_processed_files
+from tempoctrl.gradient_sports.interpolations import (
+    interpolate_ball_coordinates,
+)
+
 
 POSSESSION_COLUMNS = (
     "match_team_possession_id",
@@ -27,9 +34,21 @@ SORT_COLUMNS = (
     "framenum",
 )
 
+ATTACKING_DIRECTION_COLUMNS = (
+    'match_team_possession_id',
+    'attacking_team_direction',
+)
+
 _CURRENT_POSSESSION_COLUMN = "__current_player_possession_id"
 _SUCCESSFUL_DELIVERY_COLUMN = "__successful_delivery_possession_id"
 SYNTHETIC_PASS_END_COLUMN = "is_synthetic_pass_end"
+
+PITCH_LENGTH_METERS = 105.0
+PITCH_HALF_LENGTH_METERS = PITCH_LENGTH_METERS / 2
+PITCH_THIRD_BOUNDARY_METERS = PITCH_LENGTH_METERS / 6
+PITCH_THIRD_DTYPE = pl.Enum(
+    ["Defensive", "Middle", "Attacking"]
+)
 
 
 def validate_possession_columns(df_in: pl.LazyFrame) -> pl.LazyFrame:
@@ -283,6 +302,77 @@ def create_synthetic_final_pass_frame(
         descending=[False, False, True],
     )
 
+def append_attacking_direction(df_in : pl.LazyFrame) -> pl.LazyFrame:
+    path_events = Path("data/processed/gradient_sports/events/")
+    df_events = scan_processed_files(path_events,
+                                     columns=ATTACKING_DIRECTION_COLUMNS)
+
+    return df_in.join(
+        df_events.drop_nulls().unique(),
+        left_on = "dev_match_team_possession_id",
+        right_on = "match_team_possession_id",
+        how = "left",
+        suffix="_event",
+        coalesce=True,
+        validate="m:1"
+    )
+
+def _flip_if_attacking_left(struct_name: str, struct_column: str) -> pl.Expr:
+    """Flip (Reflect) the coordinates when team is attacking left such
+    that downstream processes consider all coordinates to be L to R"""
+    value = pl.col(struct_name).struct.field(struct_column)
+
+    return (
+        pl.when(pl.col("attacking_team_direction") == "L")
+        .then(-value)
+        .otherwise(value)
+        .alias(struct_column)
+    )
+
+def normalize_ball_coordinates(df_in: pl.LazyFrame) -> pl.LazyFrame:
+    return df_in.with_columns(
+        pl.struct(
+            [
+                pl.col("balls_smooth").struct.field("visibility"),
+                _flip_if_attacking_left("balls_smooth", "x"),
+                _flip_if_attacking_left("balls_smooth", "y"),
+                pl.col("balls_smooth").struct.field("z"),
+            ]
+        ).alias("balls_smooth")
+    )
+
+def label_pitch_thirds(df_in: pl.LazyFrame) -> pl.LazyFrame:
+    """Label valid, normalized ball x coordinates by pitch third.
+
+    Coordinates must use a centered 105-meter pitch and be normalized so
+    the possessing team attacks from left to right. Boundary coordinates
+    belong to the third immediately to their left: ``-17.5`` is
+    defensive and ``17.5`` is middle. Missing, non-finite, and
+    out-of-pitch values remain unlabeled.
+    """
+    coord_x = pl.col("balls_smooth").struct.field("x")
+
+    valid_coordinate = (
+        coord_x.is_finite().fill_null(False)
+        & coord_x.is_between(
+            -PITCH_HALF_LENGTH_METERS,
+            PITCH_HALF_LENGTH_METERS,
+            closed="both",
+        ).fill_null(False)
+    )
+
+    pitch_third = (
+        pl.when(~valid_coordinate)
+        .then(pl.lit(None, dtype=PITCH_THIRD_DTYPE))
+        .when(coord_x <= -PITCH_THIRD_BOUNDARY_METERS)
+        .then(pl.lit("Defensive", dtype=PITCH_THIRD_DTYPE))
+        .when(coord_x <= PITCH_THIRD_BOUNDARY_METERS)
+        .then(pl.lit("Middle", dtype=PITCH_THIRD_DTYPE))
+        .otherwise(pl.lit("Attacking", dtype=PITCH_THIRD_DTYPE))
+        .alias("pitch_third")
+    )
+
+    return df_in.with_columns(pitch_third)
 
 def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
     """Fill bounded gaps and extend successful player deliveries."""
@@ -291,4 +381,8 @@ def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
         .pipe(fill_bounded_possessions_id, POSSESSION_COLUMNS)
         .pipe(propagate_successful_delivery_possession)
         .pipe(create_synthetic_final_pass_frame)
+        .pipe(append_attacking_direction)
+        .pipe(normalize_ball_coordinates)
+        .pipe(interpolate_ball_coordinates)
+        .pipe(label_pitch_thirds)
     )
