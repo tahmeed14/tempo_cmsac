@@ -31,6 +31,10 @@ FINALIZE_ORDER = (
     "is_synthetic_pass_end",
     "pitch_third",
     "balls_smooth",
+    "dx",
+    "dy",
+    "ball_displacement",
+    "ball_speed",
     "away_players_smooth",
     "home_players_smooth"
 

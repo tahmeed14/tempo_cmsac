@@ -7,7 +7,9 @@ from tempoctrl.gradient_sports.ingest import scan_processed_files
 from tempoctrl.gradient_sports.interpolations import (
     interpolate_ball_coordinates,
 )
-
+from tempoctrl.gradient_sports.tempo_metrics import (
+    add_ball_displacement
+)
 
 POSSESSION_COLUMNS = (
     "match_team_possession_id",
@@ -385,4 +387,5 @@ def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
         .pipe(normalize_ball_coordinates)
         .pipe(interpolate_ball_coordinates)
         .pipe(label_pitch_thirds)
+        .pipe(add_ball_displacement, "dev_match_team_possession_id")
     )
