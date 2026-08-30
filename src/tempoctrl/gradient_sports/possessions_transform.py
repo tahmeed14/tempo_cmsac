@@ -306,6 +306,30 @@ def append_attacking_direction(df_in : pl.LazyFrame) -> pl.LazyFrame:
         validate="m:1"
     )
 
+def _flip_if_attacking_left(struct_name: str, struct_column: str) -> pl.Expr:
+    """Flip (Reflect) the coordinates when team is attacking left such
+    that downstream processes consider all coordinates to be L to R"""
+    value = pl.col(struct_name).struct.field(struct_column)
+
+    return (
+        pl.when(pl.col("attacking_team_direction") == "L")
+        .then(-value)
+        .otherwise(value)
+        .alias(struct_column)
+    )
+
+def normalize_ball_coordinates(df_in : pl.LazyFrame) -> pl.LazyFrame:
+    return df_in.with_columns(
+        pl.struct(
+            [
+                pl.col("balls_smooth").struct.field("visibility"),
+                _flip_if_attacking_left("balls_smooth", "x"),
+                _flip_if_attacking_left("balls_smooth", "y"),
+                pl.col("balls_smooth").struct.field("z"),
+            ]
+        ).alias("balls_smooth")
+    )
+
 def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
     """Fill bounded gaps and extend successful player deliveries."""
     return (
@@ -314,4 +338,5 @@ def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
         .pipe(propagate_successful_delivery_possession)
         .pipe(create_synthetic_final_pass_frame)
         .pipe(append_attacking_direction)
+        .pipe(normalize_ball_coordinates)
     )

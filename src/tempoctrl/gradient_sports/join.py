@@ -18,6 +18,7 @@ JOIN_KEY_COUNT_COLUMN = "join_key_count"
 #FIXME:
 KEEP_EVENT_COLUMNS = (
     *JOIN_KEYS,
+    "formattedgameclock",
     "match_team_possession_id",
     "match_team_player_possession_id",
     "team_possession_start",
