@@ -14,3 +14,7 @@ env/
 
 .pytest_cache/
 
+# dev scripts
+*dev*.py
+
+todo/

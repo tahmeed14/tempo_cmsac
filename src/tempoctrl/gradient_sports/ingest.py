@@ -81,3 +81,53 @@ def scan_tracking(df_path: str | Path) -> pl.LazyFrame:
         A lazy tracking-data query for downstream transformations.
     """
     return pl.scan_parquet(df_path)
+
+
+def scan_processed_files(df_path: str | Path,
+                         columns: tuple[str, ...] | None = None
+                        ) -> pl.LazyFrame:
+    """Lazily scan every Parquet file in a directory.
+
+    Args:
+        df_path: Directory containing integrated match-level Parquet 
+        files.
+
+    Returns:
+        One lazy query spanning all match files.
+
+    Raises:
+        FileNotFoundError: If the directory or Parquet files do not 
+        exist.
+    """
+    dir_path = Path(df_path)
+    if not dir_path.is_dir():
+        logger.error(
+            "Integrated data directory does not exist: %s",
+            dir_path,
+        )
+        raise FileNotFoundError(
+            f"Integrated data directory does not exist: {dir_path}"
+        )
+
+    parquet_files = sorted(dir_path.glob("*.parquet"))
+    if not parquet_files:
+        logger.error(
+            "No integrated Parquet files found in: %s",
+            dir_path,
+        )
+        raise FileNotFoundError(
+            f"No integrated Parquet files found in: {dir_path}"
+        )
+
+    logger.info(
+        "Lazily scanning %d integrated Parquet files from: %s",
+        len(parquet_files),
+        dir_path,
+    )
+
+    lf_out = pl.scan_parquet(parquet_files)
+
+    if columns:
+        return lf_out.select(columns)
+    
+    return lf_out

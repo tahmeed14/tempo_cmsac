@@ -15,16 +15,17 @@ RECAST_MAPPER = {
 
 COLUMNS = (
     "game_id",
+    "game_event_id",
+    "possession_event_id",
     "framenum",
     "period",
+    "game_event",
+    "possession_event",
     "home_players_smooth",
     "away_players_smooth",
     "balls_smooth",
-    "game_event_id",
-    "possession_event_id",
-    "game_event",
-    "possession_event"
 )
+
 
 def rename_columns(df_in : pl.LazyFrame) -> pl.LazyFrame:
     return df_in.rename(
@@ -45,10 +46,15 @@ def select_columns(df_in : pl.LazyFrame) -> pl.LazyFrame:
         *COLUMNS
     )
 
+def drop_dupes(df_in : pl.LazyFrame) -> pl.LazyFrame:
+    return df_in.unique(keep="first",
+                        maintain_order=True)
+    
 def transform_tracking(df_in : pl.LazyFrame) -> pl.LazyFrame:
     return (df_in
             .pipe(rename_columns)
             .pipe(recast_columns)
             .pipe(fill_game_id)
             .pipe(select_columns)
+            .pipe(drop_dupes)
         )
