@@ -29,6 +29,7 @@ FINALIZE_ORDER = (
     "framenum",
     "formattedgameclock",
     "is_synthetic_pass_end",
+    "pitch_third",
     "balls_smooth",
     "away_players_smooth",
     "home_players_smooth"

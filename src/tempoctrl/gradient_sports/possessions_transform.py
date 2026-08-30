@@ -318,7 +318,7 @@ def _flip_if_attacking_left(struct_name: str, struct_column: str) -> pl.Expr:
         .alias(struct_column)
     )
 
-def normalize_ball_coordinates(df_in : pl.LazyFrame) -> pl.LazyFrame:
+def normalize_ball_coordinates(df_in: pl.LazyFrame) -> pl.LazyFrame:
     return df_in.with_columns(
         pl.struct(
             [
@@ -330,6 +330,22 @@ def normalize_ball_coordinates(df_in : pl.LazyFrame) -> pl.LazyFrame:
         ).alias("balls_smooth")
     )
 
+def label_pitch_thirds(df_in: pl.LazyFrame) -> pl.LazyFrame:
+
+    coord_x = pl.col("balls_smooth").struct.field("x") 
+
+    return df_in.with_columns(
+        pl
+        .when(coord_x.is_null())
+        .then(None)
+        .when(coord_x <= -17.5)
+        .then(pl.lit("Defensive"))
+        .when((coord_x <= 17.5))
+        .then(pl.lit("Middle"))
+        .otherwise(pl.lit("Attacking"))
+        .alias("pitch_third")
+    )
+
 def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
     """Fill bounded gaps and extend successful player deliveries."""
     return (
@@ -339,4 +355,5 @@ def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
         .pipe(create_synthetic_final_pass_frame)
         .pipe(append_attacking_direction)
         .pipe(normalize_ball_coordinates)
+        .pipe(label_pitch_thirds)
     )
