@@ -39,6 +39,13 @@ _CURRENT_POSSESSION_COLUMN = "__current_player_possession_id"
 _SUCCESSFUL_DELIVERY_COLUMN = "__successful_delivery_possession_id"
 SYNTHETIC_PASS_END_COLUMN = "is_synthetic_pass_end"
 
+PITCH_LENGTH_METERS = 105.0
+PITCH_HALF_LENGTH_METERS = PITCH_LENGTH_METERS / 2
+PITCH_THIRD_BOUNDARY_METERS = PITCH_LENGTH_METERS / 6
+PITCH_THIRD_DTYPE = pl.Enum(
+    ["Defensive", "Middle", "Attacking"]
+)
+
 
 def validate_possession_columns(df_in: pl.LazyFrame) -> pl.LazyFrame:
     """Require the columns used by possession propagation.
@@ -331,20 +338,37 @@ def normalize_ball_coordinates(df_in: pl.LazyFrame) -> pl.LazyFrame:
     )
 
 def label_pitch_thirds(df_in: pl.LazyFrame) -> pl.LazyFrame:
+    """Label valid, normalized ball x coordinates by pitch third.
 
-    coord_x = pl.col("balls_smooth").struct.field("x") 
+    Coordinates must use a centered 105-meter pitch and be normalized so
+    the possessing team attacks from left to right. Boundary coordinates
+    belong to the third immediately to their left: ``-17.5`` is
+    defensive and ``17.5`` is middle. Missing, non-finite, and
+    out-of-pitch values remain unlabeled.
+    """
+    coord_x = pl.col("balls_smooth").struct.field("x")
 
-    return df_in.with_columns(
-        pl
-        .when(coord_x.is_null())
-        .then(None)
-        .when(coord_x <= -17.5)
-        .then(pl.lit("Defensive"))
-        .when((coord_x <= 17.5))
-        .then(pl.lit("Middle"))
-        .otherwise(pl.lit("Attacking"))
+    valid_coordinate = (
+        coord_x.is_finite().fill_null(False)
+        & coord_x.is_between(
+            -PITCH_HALF_LENGTH_METERS,
+            PITCH_HALF_LENGTH_METERS,
+            closed="both",
+        ).fill_null(False)
+    )
+    
+    pitch_third = (
+        pl.when(~valid_coordinate)
+        .then(pl.lit(None, dtype=PITCH_THIRD_DTYPE))
+        .when(coord_x <= -PITCH_THIRD_BOUNDARY_METERS)
+        .then(pl.lit("Defensive", dtype=PITCH_THIRD_DTYPE))
+        .when(coord_x <= PITCH_THIRD_BOUNDARY_METERS)
+        .then(pl.lit("Middle", dtype=PITCH_THIRD_DTYPE))
+        .otherwise(pl.lit("Attacking", dtype=PITCH_THIRD_DTYPE))
         .alias("pitch_third")
     )
+
+    return df_in.with_columns(pitch_third)
 
 def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
     """Fill bounded gaps and extend successful player deliveries."""
