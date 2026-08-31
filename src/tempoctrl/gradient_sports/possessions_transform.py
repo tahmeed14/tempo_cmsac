@@ -376,7 +376,6 @@ def label_pitch_thirds(df_in: pl.LazyFrame) -> pl.LazyFrame:
 
     return df_in.with_columns(pitch_third)
 
-
 def transform_possessions(
     df_in: pl.LazyFrame,
     *,

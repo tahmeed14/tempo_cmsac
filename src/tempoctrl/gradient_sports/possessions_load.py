@@ -6,6 +6,7 @@ from tempoctrl.gradient_sports.ingest import scan_processed_files
 from tempoctrl.gradient_sports.possessions_transform import (
     transform_possessions,
 )
+from tempoctrl.gradient_sports.tempo_metrics import calculate_ball_speed_tempo
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 
-FINALIZE_ORDER = (
+FRAME_LEVEL_ORDER = (
     "match_team_possession_id",
     "match_team_player_possession_id",
     "dev_match_team_player_possession_id",
@@ -48,7 +49,6 @@ FINALIZE_ORDER = (
     # "delivery_"
 )
 
-
 def possessions_load(
     df_path: str,
     output_name: str,
@@ -56,14 +56,22 @@ def possessions_load(
     frame_rate: float,
 ) -> None:
     """Lazily load and transform integrated possession data."""
-    (
-        scan_processed_files(
-            df_path=df_path,
-        )
-        .pipe(transform_possessions, frame_rate=frame_rate)
-        .select(FINALIZE_ORDER)
-        .sink_parquet(
-            f"data/model/{output_name}",
-            compression="zstd",
-        )
-    )
+
+    output_dir = "data/model/"
+
+    possessions_df_frame = (scan_processed_files(df_path=df_path,)
+                            .pipe(transform_possessions, frame_rate=frame_rate)
+                            .select(FRAME_LEVEL_ORDER))
+
+    possessions_df_frame.sink_parquet(f"{output_dir}{output_name}",
+                                      compression="zstd")
+
+    (possessions_df_frame
+     .pipe(calculate_ball_speed_tempo, "team", frame_rate)
+     .sink_parquet(f"{output_dir}team_{output_name}",
+                   compression="zstd"))
+
+    (possessions_df_frame
+     .pipe(calculate_ball_speed_tempo, "player", frame_rate)
+     .sink_parquet(f"{output_dir}player_{output_name}",
+                   compression="zstd"))
