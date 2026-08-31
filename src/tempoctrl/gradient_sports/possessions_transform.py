@@ -314,6 +314,7 @@ def append_attacking_direction(df_in : pl.LazyFrame) -> pl.LazyFrame:
         left_on = "dev_match_team_possession_id",
         right_on = "match_team_possession_id",
         how = "left",
+        maintain_order="left",
         suffix="_event",
         coalesce=True,
         validate="m:1"
