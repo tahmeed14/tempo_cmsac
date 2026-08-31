@@ -5,12 +5,6 @@ import polars as pl
 
 logger = logging.getLogger(__name__)
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-logger = logging.getLogger(__name__)
-
 JOIN_KEYS = ("game_id", "game_event_id", "possession_event_id")
 JOIN_ISSUES_DIR = Path("data/investigate/join_issues")
 JOIN_KEY_COUNT_COLUMN = "join_key_count"
