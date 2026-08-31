@@ -4,7 +4,9 @@ from tempoctrl.gradient_sports.ingest import scan_processed_files
 from tempoctrl.gradient_sports.possessions_transform import (
     transform_possessions,
 )
-from tempoctrl.gradient_sports.tempo_metrics import calculate_ball_speed_tempo
+from tempoctrl.gradient_sports.tempo_metrics import (
+    aggregate_possession_tempo,
+)
 
 FRAME_LEVEL_ORDER = (
     "match_team_possession_id",
@@ -58,11 +60,19 @@ def possessions_load(
                                       compression="zstd")
 
     (possessions_df_frame
-     .pipe(calculate_ball_speed_tempo, "team", frame_rate)
+     .pipe(
+         aggregate_possession_tempo,
+         "team",
+         frame_rate=frame_rate,
+     )
      .sink_parquet(f"{output_dir}team_{output_name}",
                    compression="zstd"))
 
     (possessions_df_frame
-     .pipe(calculate_ball_speed_tempo, "player", frame_rate)
+     .pipe(
+         aggregate_possession_tempo,
+         "player",
+         frame_rate=frame_rate,
+     )
      .sink_parquet(f"{output_dir}player_{output_name}",
                    compression="zstd"))
