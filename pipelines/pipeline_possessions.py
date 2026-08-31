@@ -1,9 +1,5 @@
-import polars as pl
 import logging
 
-from tempoctrl.gradient_sports.possessions_transform import (
-    transform_possessions,
-)
 from tempoctrl.gradient_sports.possessions_load import possessions_load
 
 logger = logging.getLogger(__name__)
@@ -14,13 +10,24 @@ logging.basicConfig(
 )
 
 
-def run_pipeline(df_path : str,) -> None:
-    possessions_load(df_path=df_path,
-                     output_name="dev.parquet")    
+def run_pipeline(
+    df_path: str,
+    *,
+    frame_rate: float,
+) -> None:
+    possessions_load(
+        df_path=df_path,
+        output_name="dev.parquet",
+        frame_rate=frame_rate,
+    )
 
 
 def main() -> None:
-    run_pipeline(df_path="data/integrated/gradient_sports")
+    run_pipeline(
+        df_path="data/integrated/gradient_sports",
+        frame_rate=29.97,
+    )
+
 
 if __name__ == "__main__":
     main()

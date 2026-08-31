@@ -1,10 +1,11 @@
-import polars as pl
 import logging
 
-from tempoctrl.gradient_sports.possessions_transform import (
-    transform_possessions
-)
+import polars as pl
+
 from tempoctrl.gradient_sports.ingest import scan_processed_files
+from tempoctrl.gradient_sports.possessions_transform import (
+    transform_possessions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,20 +46,24 @@ FINALIZE_ORDER = (
     # "possession_id_imputation_reason",
     # "is_synthetic_deliver_end",
     # "delivery_"
-    
 )
 
-def possessions_load(df_path : str,
-                     output_name : str) -> pl.LazyFrame:
+
+def possessions_load(
+    df_path: str,
+    output_name: str,
+    *,
+    frame_rate: float,
+) -> None:
     """Lazily load and transform integrated possession data."""
-    return (
+    (
         scan_processed_files(
             df_path=df_path,
         )
-        .pipe(transform_possessions)
+        .pipe(transform_possessions, frame_rate=frame_rate)
         .select(FINALIZE_ORDER)
-        .sink_parquet(f"data/model/{output_name}",
-                      compression="zstd")
+        .sink_parquet(
+            f"data/model/{output_name}",
+            compression="zstd",
+        )
     )
-
-

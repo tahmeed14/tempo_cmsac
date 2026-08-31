@@ -1,25 +1,30 @@
+"""Row-level ball movement metrics for possession tracking data."""
+
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 
 import polars as pl
 
-FPS = 29.97  # FIXME: Pull from game metadata.
-
 SYNTHETIC_PASS_END_COLUMN = "is_synthetic_pass_end"
-
-_IS_METRIC_FRAME_COLUMN = "__is_ball_metric_frame"
-_METRIC_INPUT_ORDER_COLUMN = "__ball_metric_input_order"
 
 _BALL_COLUMN = "balls_smooth"
 _FRAME_COLUMN = "framenum"
+_IS_METRIC_FRAME_COLUMN = "__is_ball_metric_frame"
+_METRIC_INPUT_ORDER_COLUMN = "__ball_metric_input_order"
 
 
 def _resolve_group_columns(
     df: pl.LazyFrame,
     possession_groups: str | Sequence[str],
 ) -> tuple[str, ...]:
-    """Normalize and validate ball-metric partition columns."""
+    """Build game-aware partitions from one or more possession IDs.
+
+    ``game_id`` is always included so identical possession IDs from
+    different games cannot share movement history. Schema inspection
+    reads metadata only and does not collect tracking rows.
+    """
     possession_columns = (
         (possession_groups,)
         if isinstance(possession_groups, str)
@@ -43,13 +48,15 @@ def _resolve_group_columns(
     ]
     if missing_columns:
         missing = ", ".join(missing_columns)
-        raise ValueError(f"Missing ball metric group columns: {missing}.")
+        raise ValueError(
+            f"Missing ball metric group columns: {missing}."
+        )
 
     return group_columns
 
 
-def _validate_metric_schema(df: pl.LazyFrame) -> pl.LazyFrame:
-    """Validate columns and dtypes required by ball movement metrics."""
+def _validate_displacement_schema(df: pl.LazyFrame) -> pl.LazyFrame:
+    """Validate frame and ball-coordinate inputs for displacement."""
     schema = df.collect_schema()
     required_columns = (_FRAME_COLUMN, _BALL_COLUMN)
     missing_columns = [
@@ -74,7 +81,9 @@ def _validate_metric_schema(df: pl.LazyFrame) -> pl.LazyFrame:
     ]
     if missing_fields:
         missing = ", ".join(missing_fields)
-        raise ValueError(f"{_BALL_COLUMN} is missing fields: {missing}.")
+        raise ValueError(
+            f"{_BALL_COLUMN} is missing fields: {missing}."
+        )
 
     nonnumeric_fields = [
         field
@@ -102,9 +111,14 @@ def _add_metric_frame_marker(
     df: pl.LazyFrame,
     group_columns: tuple[str, ...],
 ) -> pl.LazyFrame:
-    """Mark one metric row per frame, preferring a synthetic pass row."""
+    """Select one row to own movement metrics at each frame.
+
+    Synthetic pass endpoints take priority over source rows at the same
+    frame. Otherwise, the first input row is selected. Rows with null
+    game, possession, or frame keys are never selected.
+    """
     schema = df.collect_schema()
-    frame_columns = (*group_columns, "framenum")
+    frame_columns = (*group_columns, _FRAME_COLUMN)
     input_order = pl.col(_METRIC_INPUT_ORDER_COLUMN)
     is_synthetic = (
         pl.col(SYNTHETIC_PASS_END_COLUMN).fill_null(False)
@@ -144,7 +158,30 @@ def add_ball_displacement(
     df: pl.LazyFrame,
     possession_groups: str | Sequence[str],
 ) -> pl.LazyFrame:
-    """Add frame-ordered 2D displacement within each possession."""
+    """Add consecutive-frame 2D ball movement within possessions.
+
+    Each non-null displacement describes the segment ending at the
+    current row. Ball x and y coordinates are assumed to be meters.
+    Calculations use numerical frame order within each game and
+    possession, while the returned row order remains unchanged.
+
+    One row owns the metrics at each frame. A synthetic pass endpoint is
+    preferred so the incoming pass segment belongs to the passer. Other
+    duplicate rows receive null metrics. Missing coordinates also make
+    every segment touching that observation null.
+
+    Adds ``delta_x``, ``delta_y``, ``delta_frame``, and
+    ``ball_displacement``. Displacement is the Euclidean distance in
+    meters; speed is intentionally calculated by ``add_ball_speed``.
+
+    Args:
+        df: Lazy tracking rows containing frame and ball coordinates.
+        possession_groups: Possession columns that define independent
+            ball trajectories. ``game_id`` is included automatically.
+
+    Returns:
+        The lazy input with four row-level movement columns added.
+    """
     group_columns = _resolve_group_columns(df, possession_groups)
     order_columns = (_FRAME_COLUMN, _METRIC_INPUT_ORDER_COLUMN)
 
@@ -173,7 +210,7 @@ def add_ball_displacement(
     )
 
     return (
-        df.pipe(_validate_metric_schema)
+        df.pipe(_validate_displacement_schema)
         .pipe(_add_metric_frame_marker, group_columns)
         .with_columns(
             delta_x.alias("delta_x"),
@@ -187,7 +224,6 @@ def add_ball_displacement(
             _IS_METRIC_FRAME_COLUMN,
             _METRIC_INPUT_ORDER_COLUMN,
         )
-        .pipe(add_ball_speed, FPS)
     )
 
 
@@ -195,20 +231,80 @@ def add_ball_speed(
     df: pl.LazyFrame,
     frame_rate: float,
 ) -> pl.LazyFrame:
-    """Add frame-level ball speed in meters per second."""
-    if frame_rate <= 0:
-        raise ValueError("frame_rate must be greater than 0.")
+    """Convert ball displacement to meters per second.
 
-    ball_speed_expr = (
+    Speed is calculated as
+    ``ball_displacement * frame_rate / delta_frame``. Rows with null,
+    zero, or negative frame intervals receive null speed.
+
+    Args:
+        df: Lazy rows containing ``ball_displacement`` and
+            ``delta_frame``.
+        frame_rate: Finite, positive tracking samples per second.
+
+    Returns:
+        The lazy input with a Float64 ``ball_speed`` column added.
+
+    Raises:
+        ValueError: If the frame rate or required columns are invalid.
+        TypeError: If either input metric column is nonnumeric.
+    """
+    if not math.isfinite(frame_rate) or frame_rate <= 0:
+        raise ValueError(
+            "frame_rate must be finite and greater than 0."
+        )
+
+    schema = df.collect_schema()
+    required_columns = ("ball_displacement", "delta_frame")
+    missing_columns = [
+        column for column in required_columns if column not in schema
+    ]
+    if missing_columns:
+        missing = ", ".join(missing_columns)
+        raise ValueError(f"Missing ball speed columns: {missing}.")
+
+    nonnumeric_columns = [
+        column
+        for column in required_columns
+        if not schema[column].is_numeric()
+    ]
+    if nonnumeric_columns:
+        invalid = ", ".join(nonnumeric_columns)
+        raise TypeError(
+            f"Ball speed columns must be numeric: {invalid}."
+        )
+
+    valid_frame_delta = pl.col("delta_frame") > 0
+    ball_speed = pl.when(valid_frame_delta).then(
         pl.col("ball_displacement")
         * frame_rate
         / pl.col("delta_frame")
     )
 
-    return df.with_columns(
-        ball_speed_expr.alias("ball_speed")
+    return df.with_columns(ball_speed.alias("ball_speed"))
+
+
+def add_ball_metrics(
+    df: pl.LazyFrame,
+    possession_groups: str | Sequence[str],
+    *,
+    frame_rate: float,
+) -> pl.LazyFrame:
+    """Add row-level ball displacement and speed in one pipeline step.
+
+    This convenience function composes ``add_ball_displacement`` and
+    ``add_ball_speed``. The explicit frame rate keeps dataset metadata
+    outside the metric implementation.
+
+    Args:
+        df: Lazy possession-level tracking rows.
+        possession_groups: Columns defining independent trajectories.
+        frame_rate: Finite, positive tracking samples per second.
+
+    Returns:
+        The lazy input with displacement and speed columns added.
+    """
+    return (
+        df.pipe(add_ball_displacement, possession_groups)
+        .pipe(add_ball_speed, frame_rate=frame_rate)
     )
-
-
-def add_tempo(df: pl.LazyFrame):
-    pass
