@@ -26,7 +26,6 @@ def run_pipeline(match_id: int) -> None:
     df = transform_events(df)
     df = features_events(df)
     df = cleanup_events(df)
-    logger.debug(df.head(5))
     load_events(df)
 
 
