@@ -4,12 +4,11 @@ from pathlib import Path
 import polars as pl
 
 from tempoctrl.gradient_sports.ingest import scan_processed_files
+from tempoctrl.gradient_sports.ball_metrics import add_ball_metrics
 from tempoctrl.gradient_sports.interpolations import (
     interpolate_ball_coordinates,
 )
-from tempoctrl.gradient_sports.tempo_metrics import (
-    add_ball_metrics,
-)
+
 
 POSSESSION_COLUMNS = (
     "match_team_possession_id",
