@@ -13,9 +13,11 @@ _GAME_COLUMN = "game_id"
 _FRAME_COLUMN = "framenum"
 _DISPLACEMENT_COLUMN = "ball_displacement"
 _DELTA_FRAME_COLUMN = "delta_frame"
+_PLAYER_POSSESSION_COLUMN = "dev_match_team_player_possession_id"
+_UNIQUE_PLAYER_POSSESSION_COUNT = "unique_player_possession_count"
 _POSSESSION_COLUMNS: dict[PossessionLevel, str] = {
     "team": "dev_match_team_possession_id",
-    "player": "dev_match_team_player_possession_id",
+    "player": _PLAYER_POSSESSION_COLUMN,
 }
 
 
@@ -33,13 +35,15 @@ def _validate_tempo_inputs(
         )
 
     possession_column = _POSSESSION_COLUMNS[level]
-    required_columns = (
+    required_columns = [
         _GAME_COLUMN,
         possession_column,
         _FRAME_COLUMN,
         _DISPLACEMENT_COLUMN,
         _DELTA_FRAME_COLUMN,
-    )
+    ]
+    if level == "team":
+        required_columns.append(_PLAYER_POSSESSION_COLUMN)
     schema = df.collect_schema()
     missing_columns = [
         column for column in required_columns if column not in schema
@@ -65,6 +69,22 @@ def _validate_tempo_inputs(
         )
 
     return possession_column
+
+
+def _level_metadata_expressions(
+    level: PossessionLevel,
+) -> tuple[pl.Expr, ...]:
+    """Build metadata aggregations specific to a possession level."""
+    if level == "team":
+        return (
+            pl.col(_PLAYER_POSSESSION_COLUMN)
+            .drop_nulls()
+            .n_unique()
+            .cast(pl.UInt32)
+            .alias(_UNIQUE_PLAYER_POSSESSION_COUNT),
+        )
+
+    return ()
 
 
 def aggregate_possession_tempo(
@@ -94,7 +114,8 @@ def aggregate_possession_tempo(
     Returns:
         One row per possession with frame bounds, valid segment count,
         total displacement, elapsed frames, and ball tempo. Metrics are
-        null when a possession has no valid movement segment.
+        null when a possession has no valid movement segment. Team rows
+        also count their distinct non-null player possessions.
     """
     possession_column = _validate_tempo_inputs(
         df,
@@ -111,6 +132,7 @@ def aggregate_possession_tempo(
     )
     has_valid_segment = pl.col("valid_segment_count") > 0
     tempo_column = f"ball_speed_tempo_{level}"
+    metadata_expressions = _level_metadata_expressions(level)
 
     aggregated = (
         df.filter(valid_key)
@@ -118,6 +140,7 @@ def aggregate_possession_tempo(
         .agg(
             pl.col(_FRAME_COLUMN).min().alias("start_frame"),
             pl.col(_FRAME_COLUMN).max().alias("end_frame"),
+            *metadata_expressions,
             valid_segment.sum()
             .cast(pl.UInt32)
             .alias("valid_segment_count"),
