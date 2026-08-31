@@ -1,3 +1,5 @@
+"""Build frame- and possession-level model datasets."""
+
 import logging
 from pathlib import Path
 
@@ -8,6 +10,7 @@ from tempoctrl.gradient_sports.frame_rates import (
     resolve_gradient_sports_frame_rates,
 )
 from tempoctrl.gradient_sports.possessions_load import possessions_load
+from tempoctrl.pipeline_runtime import log_pipeline_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +50,12 @@ def run_pipeline(
 
 
 def main() -> None:
-    run_pipeline(
-        df_path="data/integrated/gradient_sports",
-        metadata_dir=METADATA_DIRECTORY,
-    )
+    """Build possession outputs and log the complete pipeline runtime."""
+    with log_pipeline_runtime(logger, "Possession"):
+        run_pipeline(
+            df_path="data/integrated/gradient_sports",
+            metadata_dir=METADATA_DIRECTORY,
+        )
 
 
 if __name__ == "__main__":
