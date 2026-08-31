@@ -5,6 +5,7 @@ import polars as pl
 
 from tempoctrl.gradient_sports.ingest import scan_processed_files
 from tempoctrl.gradient_sports.ball_metrics import add_ball_metrics
+from tempoctrl.gradient_sports.frame_rates import FrameRateSpec
 from tempoctrl.gradient_sports.interpolations import (
     interpolate_ball_coordinates,
 )
@@ -379,7 +380,7 @@ def label_pitch_thirds(df_in: pl.LazyFrame) -> pl.LazyFrame:
 def transform_possessions(
     df_in: pl.LazyFrame,
     *,
-    frame_rate: float,
+    frame_rate: FrameRateSpec,
 ) -> pl.LazyFrame:
     """Fill bounded gaps and extend successful player deliveries."""
     return (

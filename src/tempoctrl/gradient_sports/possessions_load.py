@@ -6,6 +6,7 @@ from pathlib import Path
 
 import polars as pl
 
+from tempoctrl.gradient_sports.frame_rates import FrameRateSpec
 from tempoctrl.gradient_sports.ingest import scan_processed_files
 from tempoctrl.gradient_sports.possessions_transform import (
     transform_possessions,
@@ -38,6 +39,7 @@ FRAME_LEVEL_ORDER = (
     "delta_frame",
     "ball_displacement",
     "ball_speed",
+    "frame_rate",
     "away_players_smooth",
     "home_players_smooth",
 )
@@ -50,6 +52,7 @@ _TEMPO_INPUT_COLUMNS = (
     "framenum",
     "ball_displacement",
     "delta_frame",
+    "frame_rate",
 )
 _POSSESSION_LEVELS: tuple[PossessionLevel, ...] = ("team", "player")
 
@@ -59,7 +62,6 @@ def write_possession_outputs(
     output_name: str,
     *,
     output_dir: str | Path,
-    frame_rate: float,
 ) -> None:
     """Write frame data once, then derive possession-level outputs.
 
@@ -72,7 +74,6 @@ def write_possession_outputs(
         frame_df: Fully transformed frame-level possession rows.
         output_name: File name for the frame-level parquet.
         output_dir: Directory receiving all three parquet files.
-        frame_rate: Finite, positive tracking samples per second.
     """
     output_directory = Path(output_dir)
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -89,7 +90,6 @@ def write_possession_outputs(
             tempo_input.pipe(
                 aggregate_possession_tempo,
                 level,
-                frame_rate=frame_rate,
             ).sink_parquet(output_path, compression="zstd")
         )
 
@@ -99,7 +99,7 @@ def possessions_load(
     output_name: str,
     *,
     output_dir: str | Path,
-    frame_rate: float,
+    frame_rate: FrameRateSpec,
 ) -> None:
     """Load, transform, and write possession datasets."""
     frame_df = (
@@ -112,5 +112,4 @@ def possessions_load(
         frame_df,
         output_name,
         output_dir=output_dir,
-        frame_rate=frame_rate,
     )

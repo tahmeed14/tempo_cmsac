@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 
 import polars as pl
+
+from tempoctrl.gradient_sports.frame_rates import (
+    FRAME_RATE_COLUMN,
+    FrameRateSpec,
+    add_frame_rate_column,
+)
 
 SYNTHETIC_PASS_END_COLUMN = "is_synthetic_pass_end"
 
@@ -229,31 +234,27 @@ def add_ball_displacement(
 
 def add_ball_speed(
     df: pl.LazyFrame,
-    frame_rate: float,
+    frame_rate: FrameRateSpec,
 ) -> pl.LazyFrame:
     """Convert ball displacement to meters per second.
 
-    Speed is calculated as
-    ``ball_displacement * frame_rate / delta_frame``. Rows with null,
-    zero, or negative frame intervals receive null speed.
+    Speed is calculated as ``ball_displacement * frame_rate /
+    delta_frame``. Rows with null, zero, or negative frame intervals
+    receive null speed. The resolved rate is retained as metadata.
 
     Args:
         df: Lazy rows containing ``ball_displacement`` and
             ``delta_frame``.
-        frame_rate: Finite, positive tracking samples per second.
+        frame_rate: Shared rate or mapping from game ID to rate.
 
     Returns:
-        The lazy input with a Float64 ``ball_speed`` column added.
+        The lazy input with Float64 ``frame_rate`` and ``ball_speed``
+        columns added.
 
     Raises:
         ValueError: If the frame rate or required columns are invalid.
         TypeError: If either input metric column is nonnumeric.
     """
-    if not math.isfinite(frame_rate) or frame_rate <= 0:
-        raise ValueError(
-            "frame_rate must be finite and greater than 0."
-        )
-
     schema = df.collect_schema()
     required_columns = ("ball_displacement", "delta_frame")
     missing_columns = [
@@ -274,21 +275,22 @@ def add_ball_speed(
             f"Ball speed columns must be numeric: {invalid}."
         )
 
+    with_frame_rate = add_frame_rate_column(df, frame_rate)
     valid_frame_delta = pl.col("delta_frame") > 0
     ball_speed = pl.when(valid_frame_delta).then(
         pl.col("ball_displacement")
-        * frame_rate
+        * pl.col(FRAME_RATE_COLUMN)
         / pl.col("delta_frame")
     )
 
-    return df.with_columns(ball_speed.alias("ball_speed"))
+    return with_frame_rate.with_columns(ball_speed.alias("ball_speed"))
 
 
 def add_ball_metrics(
     df: pl.LazyFrame,
     possession_groups: str | Sequence[str],
     *,
-    frame_rate: float,
+    frame_rate: FrameRateSpec,
 ) -> pl.LazyFrame:
     """Add row-level ball displacement and speed in one pipeline step.
 
@@ -299,7 +301,7 @@ def add_ball_metrics(
     Args:
         df: Lazy possession-level tracking rows.
         possession_groups: Columns defining independent trajectories.
-        frame_rate: Finite, positive tracking samples per second.
+        frame_rate: Shared rate or mapping from game ID to rate.
 
     Returns:
         The lazy input with displacement and speed columns added.
