@@ -11,6 +11,9 @@ SYNTHETIC_PASS_END_COLUMN = "is_synthetic_pass_end"
 _IS_METRIC_FRAME_COLUMN = "__is_ball_metric_frame"
 _METRIC_INPUT_ORDER_COLUMN = "__ball_metric_input_order"
 
+_BALL_COLUMN = "balls_smooth"
+_FRAME_COLUMN = "framenum"
+
 
 def _resolve_group_columns(
     df: pl.LazyFrame,
@@ -45,6 +48,56 @@ def _resolve_group_columns(
     return group_columns
 
 
+def _validate_metric_schema(df: pl.LazyFrame) -> pl.LazyFrame:
+    """Validate columns and dtypes required by ball movement metrics."""
+    schema = df.collect_schema()
+    required_columns = (_FRAME_COLUMN, _BALL_COLUMN)
+    missing_columns = [
+        column for column in required_columns if column not in schema
+    ]
+    if missing_columns:
+        missing = ", ".join(missing_columns)
+        raise ValueError(f"Missing ball metric columns: {missing}.")
+
+    if not schema[_FRAME_COLUMN].is_numeric():
+        raise TypeError(f"{_FRAME_COLUMN} must be numeric.")
+
+    ball_dtype = schema[_BALL_COLUMN]
+    if not isinstance(ball_dtype, pl.Struct):
+        raise TypeError(f"{_BALL_COLUMN} must be a struct column.")
+
+    ball_fields = {
+        field.name: field.dtype for field in ball_dtype.fields
+    }
+    missing_fields = [
+        field for field in ("x", "y") if field not in ball_fields
+    ]
+    if missing_fields:
+        missing = ", ".join(missing_fields)
+        raise ValueError(f"{_BALL_COLUMN} is missing fields: {missing}.")
+
+    nonnumeric_fields = [
+        field
+        for field in ("x", "y")
+        if not ball_fields[field].is_numeric()
+    ]
+    if nonnumeric_fields:
+        invalid = ", ".join(nonnumeric_fields)
+        raise TypeError(
+            f"{_BALL_COLUMN} fields must be numeric: {invalid}."
+        )
+
+    if (
+        SYNTHETIC_PASS_END_COLUMN in schema
+        and schema[SYNTHETIC_PASS_END_COLUMN] != pl.Boolean
+    ):
+        raise TypeError(
+            f"{SYNTHETIC_PASS_END_COLUMN} must be Boolean."
+        )
+
+    return df
+
+
 def _add_metric_frame_marker(
     df: pl.LazyFrame,
     group_columns: tuple[str, ...],
@@ -70,11 +123,19 @@ def _add_metric_frame_marker(
         .min()
         .over(frame_columns)
     )
+    valid_partition = pl.all_horizontal(
+        *(pl.col(column).is_not_null() for column in group_columns),
+        pl.col(_FRAME_COLUMN).is_not_null(),
+    )
+    selected_order = pl.coalesce(
+        first_synthetic_order,
+        first_input_order,
+    )
 
     return with_input_order.with_columns(
         (
-            input_order
-            == pl.coalesce(first_synthetic_order, first_input_order)
+            valid_partition
+            & (input_order == selected_order)
         ).alias(_IS_METRIC_FRAME_COLUMN)
     )
 
@@ -85,36 +146,35 @@ def add_ball_displacement(
 ) -> pl.LazyFrame:
     """Add frame-ordered 2D displacement within each possession."""
     group_columns = _resolve_group_columns(df, possession_groups)
-    ball_struct = "balls_smooth"
-    order_columns = ("framenum", _METRIC_INPUT_ORDER_COLUMN)
+    order_columns = (_FRAME_COLUMN, _METRIC_INPUT_ORDER_COLUMN)
 
-    x = pl.col(ball_struct).struct.field("x")
-    y = pl.col(ball_struct).struct.field("y")
+    ball = pl.col(_BALL_COLUMN)
+    x = ball.struct.field("x")
+    y = ball.struct.field("y")
     is_metric_frame = pl.col(_IS_METRIC_FRAME_COLUMN)
-    metric_x = pl.when(is_metric_frame).then(x)
-    metric_y = pl.when(is_metric_frame).then(y)
-    metric_frame = pl.when(is_metric_frame).then(pl.col("framenum"))
-
-    previous_x = metric_x.forward_fill().shift().over(
+    metric_state = pl.when(is_metric_frame).then(
+        pl.struct(
+            x.alias("x"),
+            y.alias("y"),
+            pl.col(_FRAME_COLUMN).alias("frame"),
+        )
+    )
+    previous_state = metric_state.forward_fill().shift().over(
         group_columns,
         order_by=order_columns,
     )
-    previous_y = metric_y.forward_fill().shift().over(
-        group_columns,
-        order_by=order_columns,
-    )
-    previous_frame = metric_frame.forward_fill().shift().over(
-        group_columns,
-        order_by=order_columns,
-    )
+    previous_x = previous_state.struct.field("x")
+    previous_y = previous_state.struct.field("y")
+    previous_frame = previous_state.struct.field("frame")
     delta_x = pl.when(is_metric_frame).then(x - previous_x)
     delta_y = pl.when(is_metric_frame).then(y - previous_y)
     delta_frame = pl.when(is_metric_frame).then(
-        pl.col("framenum") - previous_frame
+        pl.col(_FRAME_COLUMN) - previous_frame
     )
 
     return (
-        df.pipe(_add_metric_frame_marker, group_columns)
+        df.pipe(_validate_metric_schema)
+        .pipe(_add_metric_frame_marker, group_columns)
         .with_columns(
             delta_x.alias("delta_x"),
             delta_y.alias("delta_y"),
