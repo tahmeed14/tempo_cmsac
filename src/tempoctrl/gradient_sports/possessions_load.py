@@ -1,5 +1,3 @@
-import logging
-
 import polars as pl
 
 from tempoctrl.gradient_sports.ingest import scan_processed_files
@@ -7,13 +5,6 @@ from tempoctrl.gradient_sports.possessions_transform import (
     transform_possessions,
 )
 from tempoctrl.gradient_sports.tempo_metrics import calculate_ball_speed_tempo
-
-logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
 
 FRAME_LEVEL_ORDER = (
     "match_team_possession_id",
