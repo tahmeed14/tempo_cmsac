@@ -4,12 +4,12 @@ from pathlib import Path
 import polars as pl
 
 from tempoctrl.gradient_sports.ingest import scan_processed_files
+from tempoctrl.gradient_sports.ball_metrics import add_ball_metrics
+from tempoctrl.gradient_sports.frame_rates import FrameRateSpec
 from tempoctrl.gradient_sports.interpolations import (
     interpolate_ball_coordinates,
 )
-from tempoctrl.gradient_sports.tempo_metrics import (
-    add_ball_displacement
-)
+
 
 POSSESSION_COLUMNS = (
     "match_team_possession_id",
@@ -314,6 +314,7 @@ def append_attacking_direction(df_in : pl.LazyFrame) -> pl.LazyFrame:
         left_on = "dev_match_team_possession_id",
         right_on = "match_team_possession_id",
         how = "left",
+        maintain_order="left",
         suffix="_event",
         coalesce=True,
         validate="m:1"
@@ -376,7 +377,11 @@ def label_pitch_thirds(df_in: pl.LazyFrame) -> pl.LazyFrame:
 
     return df_in.with_columns(pitch_third)
 
-def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
+def transform_possessions(
+    df_in: pl.LazyFrame,
+    *,
+    frame_rate: FrameRateSpec,
+) -> pl.LazyFrame:
     """Fill bounded gaps and extend successful player deliveries."""
     return (
         df_in.pipe(validate_possession_columns)
@@ -387,5 +392,9 @@ def transform_possessions(df_in: pl.LazyFrame) -> pl.LazyFrame:
         .pipe(normalize_ball_coordinates)
         .pipe(interpolate_ball_coordinates)
         .pipe(label_pitch_thirds)
-        .pipe(add_ball_displacement, "dev_match_team_possession_id")
+        .pipe(
+            add_ball_metrics,
+            "dev_match_team_possession_id",
+            frame_rate=frame_rate,
+        )
     )

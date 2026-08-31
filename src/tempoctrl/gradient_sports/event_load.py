@@ -5,11 +5,6 @@ import polars as pl
 
 logger = logging.getLogger(__name__)
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
-
 
 def load_events(df_in: pl.DataFrame) -> None:
     """Write one match of cleaned event data to Parquet."""
