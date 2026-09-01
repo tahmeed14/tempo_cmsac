@@ -14,10 +14,12 @@ _GAME_COLUMN = "game_id"
 _FRAME_COLUMN = "framenum"
 _DISPLACEMENT_COLUMN = "ball_displacement"
 _DELTA_FRAME_COLUMN = "delta_frame"
+_TEAM_POSSESSION_COLUMN = "dev_match_team_possession_id"
 _PLAYER_POSSESSION_COLUMN = "dev_match_team_player_possession_id"
 _UNIQUE_PLAYER_POSSESSION_COUNT = "unique_player_possession_count"
+_TEAM_START_FRAME_COLUMN = "__team_possession_start_frame"
 _POSSESSION_COLUMNS: dict[PossessionLevel, str] = {
-    "team": "dev_match_team_possession_id",
+    "team": _TEAM_POSSESSION_COLUMN,
     "player": _PLAYER_POSSESSION_COLUMN,
 }
 
@@ -40,6 +42,8 @@ def _validate_tempo_inputs(
     ]
     if level == "team":
         required_columns.append(_PLAYER_POSSESSION_COLUMN)
+    else:
+        required_columns.append(_TEAM_POSSESSION_COLUMN)
     schema = df.collect_schema()
     missing_columns = [
         column for column in required_columns if column not in schema
@@ -81,7 +85,62 @@ def _level_metadata_expressions(
             .alias(_UNIQUE_PLAYER_POSSESSION_COUNT),
         )
 
-    return ()
+    return (
+        pl.col(_TEAM_START_FRAME_COLUMN)
+        .first()
+        .alias(_TEAM_START_FRAME_COLUMN),
+    )
+
+
+def _add_possession_sequence(df: pl.LazyFrame) -> pl.LazyFrame:
+    """Number player possessions chronologically within a team spell.
+
+    Sequence numbers are one-based. A team possession receives null
+    sequence numbers if any player possessions share a start frame or
+    have a null start frame. This exposes invalid ordering data rather
+    than resolving ties arbitrarily.
+    """
+    team_group = (_GAME_COLUMN, _TEAM_POSSESSION_COLUMN)
+    start_group = (*team_group, "start_frame")
+    invalid_start = (
+        (pl.len().over(start_group) > 1)
+        | pl.col("start_frame").is_null()
+    )
+    invalid_team_sequence = invalid_start.any().over(team_group)
+    sequence_number = (
+        pl.col("start_frame")
+        .rank(method="ordinal")
+        .over(team_group)
+        .cast(pl.UInt32)
+    )
+
+    return df.with_columns(
+        pl.when(~invalid_team_sequence)
+        .then(sequence_number)
+        .alias("player_possession_sequence_number")
+    )
+
+
+def _add_possession_time_elapsed(df: pl.LazyFrame) -> pl.LazyFrame:
+    """Measure each player possession's start from the true team start."""
+    elapsed_frames = (
+        pl.col("start_frame") - pl.col(_TEAM_START_FRAME_COLUMN)
+    )
+    valid_elapsed_frames = (
+        elapsed_frames.is_not_null() & (elapsed_frames >= 0)
+    )
+
+    return df.with_columns(
+        pl.when(valid_elapsed_frames)
+        .then(elapsed_frames)
+        .alias("elapsed_frames_team_possession"),
+        pl.when(valid_elapsed_frames)
+        .then(
+            elapsed_frames.cast(pl.Float64)
+            / pl.col(FRAME_RATE_COLUMN)
+        )
+        .alias("elapsed_seconds_team_possession"),
+    )
 
 
 def aggregate_possession_tempo(
@@ -109,13 +168,33 @@ def aggregate_possession_tempo(
         One row per possession with frame bounds, valid segment count,
         total displacement, elapsed frames, and ball tempo. Metrics are
         null when a possession has no valid movement segment. Team rows
-        also count their distinct non-null player possessions.
+        also count their distinct non-null player possessions. Player
+        rows include their team ID, chronological sequence, and elapsed
+        time from the true team-possession start.
     """
     possession_column = _validate_tempo_inputs(
         df,
         level,
     )
-    group_columns = (_GAME_COLUMN, possession_column)
+    group_columns = (
+        (_GAME_COLUMN, possession_column)
+        if level == "team"
+        else (
+            _GAME_COLUMN,
+            _TEAM_POSSESSION_COLUMN,
+            possession_column,
+        )
+    )
+    metric_input = (
+        df
+        if level == "team"
+        else df.with_columns(
+            pl.col(_FRAME_COLUMN)
+            .min()
+            .over(_GAME_COLUMN, _TEAM_POSSESSION_COLUMN)
+            .alias(_TEAM_START_FRAME_COLUMN)
+        )
+    )
     valid_key = pl.all_horizontal(
         *(pl.col(column).is_not_null() for column in group_columns)
     )
@@ -137,15 +216,16 @@ def aggregate_possession_tempo(
     )
     tempo_column = f"ball_speed_tempo_{level}"
     metadata_expressions = _level_metadata_expressions(level)
-    output_columns = [
+    metadata_columns = (
+        [_UNIQUE_PLAYER_POSSESSION_COUNT]
+        if level == "team"
+        else [_TEAM_START_FRAME_COLUMN]
+    )
+    base_output_columns = [
         *group_columns,
         "start_frame",
         "end_frame",
-        *(
-            [_UNIQUE_PLAYER_POSSESSION_COUNT]
-            if level == "team"
-            else []
-        ),
+        *metadata_columns,
         FRAME_RATE_COLUMN,
         "valid_segment_count",
         "total_ball_displacement",
@@ -154,7 +234,7 @@ def aggregate_possession_tempo(
     ]
 
     aggregated = (
-        df.filter(valid_key)
+        metric_input.filter(valid_key)
         .group_by(group_columns)
         .agg(
             pl.col(_FRAME_COLUMN).min().alias("start_frame"),
@@ -203,8 +283,32 @@ def aggregate_possession_tempo(
                 / pl.col("elapsed_frames")
             ).alias(tempo_column)
         )
-        .select(output_columns)
-        .sort(group_columns)
+        .select(base_output_columns)
     )
 
-    return aggregated
+    if level == "team":
+        return aggregated.sort(group_columns)
+
+    player_output_columns = [
+        *group_columns,
+        "player_possession_sequence_number",
+        "start_frame",
+        "end_frame",
+        "elapsed_frames_team_possession",
+        "elapsed_seconds_team_possession",
+        FRAME_RATE_COLUMN,
+        "valid_segment_count",
+        "total_ball_displacement",
+        "elapsed_frames",
+        tempo_column,
+    ]
+    return (
+        aggregated.pipe(_add_possession_sequence)
+        .pipe(_add_possession_time_elapsed)
+        .select(player_output_columns)
+        .sort(
+            _GAME_COLUMN,
+            _TEAM_POSSESSION_COLUMN,
+            "player_possession_sequence_number",
+        )
+    )
