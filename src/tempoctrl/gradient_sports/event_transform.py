@@ -126,6 +126,13 @@ LINESBROKEN_MAPPER = {
     "MD" : "Midfield & Defense"
 }
 
+PERIOD_MAPPER = {
+    1 : "1",
+    2 : "2",
+    3 : "AET",
+    4 : "AET"
+}
+
 RENAME_MAPPER = {
     "gameid": "game_id",
     "gameeventid": "game_event_id",
@@ -140,6 +147,7 @@ RENAME_MAPPER = {
 
 FINALIZE_ORDER = (
     "game_id",
+    "game_period",
     "game_event_id",
     "possession_event_id",
     "formattedgameclock",
@@ -158,7 +166,7 @@ FINALIZE_EXCLUDE = (
     "outtype",
     "endtype",
     "duration",
-    "period"
+    # "period"
 )
 
 def select_events_columns(df_in: pl.DataFrame) -> pl.DataFrame:
@@ -273,6 +281,13 @@ def reclassify_linesbrokentype(df_in : pl.DataFrame) -> pl.DataFrame:
         .alias("lines_broken_type")
     ).drop("pe_linesbrokentype")
 
+def reclassify_period(df_in: pl.LazyFrame | pl.DataFrame) -> pl.DataFrame:
+    return df_in.with_columns(
+        pl.col("ge_period")
+        .replace_strict(PERIOD_MAPPER, default="None")
+        .fill_null("None")
+        .alias("game_period")
+    )
 
 def rename_classes_setpieces(df_in : pl.DataFrame) -> pl.DataFrame:
     return df_in.with_columns(
@@ -537,6 +552,7 @@ def transform_events(df_in: pl.DataFrame) -> pl.DataFrame:
         df_in.pipe(select_events_columns)
         .pipe(drop_pen_shootouts)
         .pipe(drop_foul_events)
+        .pipe(reclassify_period)
         .pipe(reclassify_ballheight)
         .pipe(reclassify_pressuretype)
         .pipe(reclassify_linesbrokentype)

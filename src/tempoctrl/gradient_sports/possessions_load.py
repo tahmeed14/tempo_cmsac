@@ -51,6 +51,7 @@ _TEMPO_INPUT_COLUMNS = (
     "dev_match_team_possession_id",
     "dev_match_team_player_possession_id",
     "framenum",
+    "pitch_third",
     "ball_displacement",
     "delta_frame",
     "frame_rate",
