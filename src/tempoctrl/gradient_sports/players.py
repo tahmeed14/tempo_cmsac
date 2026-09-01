@@ -9,7 +9,8 @@ import polars as pl
 logger = logging.getLogger(__name__)
 
 PLAYER_LOOKUP_PATH = Path(
-    "data/processed/gradient_sports/player_game_lookup.parquet"
+    "data/curated/gradient_sports/metadata_lookup/"
+    "player_game_lookup.parquet"
 )
 
 POSITION_MAPPER = {
