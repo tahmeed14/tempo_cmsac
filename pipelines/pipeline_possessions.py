@@ -19,7 +19,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 
-OUTPUT_DIRECTORY = Path("data/model")
+OUTPUT_DIRECTORY = Path("data/analysis")
 METADATA_DIRECTORY = Path("data/raw/gradient_sports/metadata")
 
 
@@ -43,7 +43,7 @@ def run_pipeline(
     }
     possessions_load(
         df_path=df_path,
-        output_name="dev.parquet",
+        output_name="possessions.parquet",
         output_dir=OUTPUT_DIRECTORY,
         frame_rate=frame_rates,
     )
