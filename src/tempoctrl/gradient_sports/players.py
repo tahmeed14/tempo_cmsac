@@ -97,6 +97,11 @@ PLAYER_LOOKUP_KEYS = (
     "player_id",
 )
 
+PLAYER_FEATURE_COLUMNS = (
+    "opponent_id",
+    "player_position_group",
+)
+
 TRACKING_LOOKUP_KEYS = (
     "game_id",
     "team_id",
@@ -392,3 +397,84 @@ def scan_player_game_lookup(
         )
 
     return pl.scan_parquet(lookup_path)
+
+
+def add_player_lookup_features(
+    df_in: pl.LazyFrame,
+    df_lookup: pl.LazyFrame | None = None,
+) -> pl.LazyFrame:
+    """Add player position and opponent features to downstream rows.
+
+    Args:
+        df_in: Lazy downstream data containing the player lookup keys.
+        df_lookup: Optional lazy lookup; defaults to the processed file.
+
+    Returns:
+        A lazy left join preserving every downstream input row.
+
+    Raises:
+        ValueError: If required columns are missing or already exist.
+    """
+    if df_lookup is None:
+        df_lookup = scan_player_game_lookup()
+
+    input_schema = df_in.collect_schema()
+    lookup_schema = df_lookup.collect_schema()
+    missing_input_keys = [
+        column_name
+        for column_name in PLAYER_LOOKUP_KEYS
+        if column_name not in input_schema
+    ]
+    if missing_input_keys:
+        missing_columns = ", ".join(missing_input_keys)
+        raise ValueError(
+            f"Downstream data is missing player lookup keys: "
+            f"{missing_columns}"
+        )
+
+    required_lookup_columns = (
+        *PLAYER_LOOKUP_KEYS,
+        *PLAYER_FEATURE_COLUMNS,
+    )
+    missing_lookup_columns = [
+        column_name
+        for column_name in required_lookup_columns
+        if column_name not in lookup_schema
+    ]
+    if missing_lookup_columns:
+        missing_columns = ", ".join(missing_lookup_columns)
+        raise ValueError(
+            f"Player lookup is missing required columns: "
+            f"{missing_columns}"
+        )
+
+    existing_features = [
+        column_name
+        for column_name in PLAYER_FEATURE_COLUMNS
+        if column_name in input_schema
+    ]
+    if existing_features:
+        existing_columns = ", ".join(existing_features)
+        raise ValueError(
+            f"Downstream data already contains player features: "
+            f"{existing_columns}"
+        )
+
+    lookup_key_expressions = [
+        pl.col(column_name)
+        .cast(input_schema[column_name])
+        .alias(column_name)
+        for column_name in PLAYER_LOOKUP_KEYS
+    ]
+    df_features = df_lookup.select(
+        *lookup_key_expressions,
+        *PLAYER_FEATURE_COLUMNS,
+    )
+
+    return df_in.join(
+        df_features,
+        on=PLAYER_LOOKUP_KEYS,
+        how="left",
+        coalesce=True,
+        validate="m:1",
+    )
