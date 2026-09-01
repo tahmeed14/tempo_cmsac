@@ -27,6 +27,8 @@ POSSESSION_COLUMNS = (
     "player_possession_sequence_number",
     "elapsed_seconds_team_possession",
     "ball_speed_tempo_player",
+    "total_ball_displacement",
+    "elapsed_frames",
     "starting_pitch_third",
 )
 
@@ -44,6 +46,13 @@ MODEL_ORDER = (
     "teamname",
 )
 
+DROP_COLUMNS_LOOKUP = (
+    "player_id",
+    "playername",
+    "teamname",
+    "team_id",
+)
+
 def load_modeldata():
     dir_root = "data/processed/gradient_sports/"
 
@@ -57,27 +66,30 @@ def load_modeldata():
             maintain_order=True,
         )
         )
-
-    # team_poss_df = (
-    #    pl.scan_parquet(f"data/analysis/player_possessions.parquet")
-    #    .select(*POSSESSION_COLUMNS)) 
-    # )
     
     player_poss_df = (
         pl.scan_parquet(f"data/analysis/player_possessions.parquet")
         .select(*POSSESSION_COLUMNS))
 
-
-    print(player_poss_df.collect().columns)
-    print(player_poss_df.collect().shape)
-
-    model_df = player_poss_df.join(
-        events_df,
-        on=JOIN_KEYS,
-        how="left",
-        validate="1:1"
+    possession_lookup_df = (
+        pl.scan_parquet(f"data/curated/gradient_sports/possession_lookup/match_possession_lookup.parquet")
+        .drop(*DROP_COLUMNS_LOOKUP)
     )
 
+    model_df = (
+        player_poss_df
+        .join(
+            events_df,
+            on=JOIN_KEYS,
+            how="left",
+            validate="1:1"
+        )
+        .join(possession_lookup_df,
+              on = "match_team_player_possession_id",
+              how = "left",
+              validate = "1:1")
+    )
+    
     print(model_df.collect().shape)
 
     model_df.sink_parquet(
