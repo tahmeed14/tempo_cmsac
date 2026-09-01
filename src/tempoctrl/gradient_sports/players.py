@@ -1,9 +1,16 @@
 """Build player lookup data from Gradient Sports roster files."""
 
+import logging
 from pathlib import Path
 
 import polars as pl
 
+
+logger = logging.getLogger(__name__)
+
+PLAYER_LOOKUP_PATH = Path(
+    "data/processed/gradient_sports/player_game_lookup.parquet"
+)
 
 POSITION_MAPPER = {
     # Goalkeepers
@@ -333,3 +340,55 @@ def build_player_game_lookup(roster_dir: str | Path) -> pl.DataFrame:
     _validate_unique_key(df_lookup, TRACKING_LOOKUP_KEYS)
 
     return add_opponent_ids(df_lookup).sort(PLAYER_LOOKUP_KEYS)
+
+
+def write_player_game_lookup(
+    df_lookup: pl.DataFrame,
+    output_path: str | Path = PLAYER_LOOKUP_PATH,
+    overwrite: bool = False,
+) -> Path:
+    """Write a player-game lookup to compressed Parquet.
+
+    Args:
+        df_lookup: Validated lookup returned by the lookup builder.
+        output_path: Destination for the lookup Parquet file.
+        overwrite: Whether to replace an existing lookup file.
+
+    Returns:
+        The resolved output path used by the writer.
+    """
+    output_path = Path(output_path)
+    if output_path.is_file() and not overwrite:
+        logger.info(
+            "Player lookup already exists and was not overwritten: %s",
+            output_path,
+        )
+        return output_path
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df_lookup.write_parquet(output_path, compression="zstd")
+    logger.info("Wrote player lookup Parquet file: %s", output_path)
+    return output_path
+
+
+def scan_player_game_lookup(
+    lookup_path: str | Path = PLAYER_LOOKUP_PATH,
+) -> pl.LazyFrame:
+    """Lazily scan a processed player-game lookup.
+
+    Args:
+        lookup_path: Path to the processed player lookup Parquet file.
+
+    Returns:
+        A lazy query preserving the stored lookup schema.
+
+    Raises:
+        FileNotFoundError: If the lookup file does not exist.
+    """
+    lookup_path = Path(lookup_path)
+    if not lookup_path.is_file():
+        raise FileNotFoundError(
+            f"Player lookup file does not exist: {lookup_path}"
+        )
+
+    return pl.scan_parquet(lookup_path)
