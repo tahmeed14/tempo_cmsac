@@ -16,6 +16,8 @@ _DISPLACEMENT_COLUMN = "ball_displacement"
 _DELTA_FRAME_COLUMN = "delta_frame"
 _TEAM_POSSESSION_COLUMN = "dev_match_team_possession_id"
 _PLAYER_POSSESSION_COLUMN = "dev_match_team_player_possession_id"
+_OUTPUT_TEAM_POSSESSION_COLUMN = "match_team_possession_id"
+_OUTPUT_PLAYER_POSSESSION_COLUMN = "match_team_player_possession_id"
 _UNIQUE_PLAYER_POSSESSION_COUNT = "unique_player_possession_count"
 _TEAM_START_FRAME_COLUMN = "__team_possession_start_frame"
 _POSSESSION_COLUMNS: dict[PossessionLevel, str] = {
@@ -291,7 +293,11 @@ def aggregate_possession_tempo(
     )
 
     if level == "team":
-        return aggregated.sort(group_columns)
+        return aggregated.rename(
+            {
+                _TEAM_POSSESSION_COLUMN: _OUTPUT_TEAM_POSSESSION_COLUMN,
+            }
+        ).sort(_GAME_COLUMN, _OUTPUT_TEAM_POSSESSION_COLUMN)
 
     player_output_columns = [
         *group_columns,
@@ -310,9 +316,15 @@ def aggregate_possession_tempo(
         aggregated.pipe(_add_possession_sequence)
         .pipe(_add_possession_time_elapsed)
         .select(player_output_columns)
+        .rename(
+            {
+                _TEAM_POSSESSION_COLUMN: _OUTPUT_TEAM_POSSESSION_COLUMN,
+                _PLAYER_POSSESSION_COLUMN: _OUTPUT_PLAYER_POSSESSION_COLUMN,
+            }
+        )
         .sort(
             _GAME_COLUMN,
-            _TEAM_POSSESSION_COLUMN,
+            _OUTPUT_TEAM_POSSESSION_COLUMN,
             "player_possession_sequence_number",
         )
     )
