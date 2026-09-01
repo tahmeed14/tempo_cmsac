@@ -230,6 +230,7 @@ def aggregate_possession_tempo(
         "valid_segment_count",
         "total_ball_displacement",
         "elapsed_frames",
+        "elapsed_duration",
         tempo_column,
     ]
 
@@ -277,6 +278,9 @@ def aggregate_possession_tempo(
             .alias(FRAME_RATE_COLUMN),
         )
         .with_columns(
+            (
+                pl.col("elapsed_frames") /  pl.col(FRAME_RATE_COLUMN)
+            ).alias("elapsed_duration"),
             (
                 pl.col("total_ball_displacement")
                 * pl.col(FRAME_RATE_COLUMN)
