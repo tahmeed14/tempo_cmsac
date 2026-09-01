@@ -66,6 +66,25 @@ PLAYER_GAME_SCHEMA = {
     "started": pl.Boolean,
 }
 
+PLAYER_LOOKUP_KEYS = (
+    "game_id",
+    "team_id",
+    "player_id",
+)
+
+TRACKING_LOOKUP_KEYS = (
+    "game_id",
+    "team_id",
+    "shirt_number",
+)
+
+REQUIRED_ID_COLUMNS = (
+    "game_id",
+    "team_id",
+    "player_id",
+    "shirt_number",
+)
+
 
 def _parse_game_id(roster_path: Path) -> int:
     """Parse a numeric game identifier from a roster filename."""
@@ -91,6 +110,69 @@ def _validate_position_groups(df_roster: pl.DataFrame) -> None:
         raise ValueError(
             "Unmapped positionGroupType values: "
             f"{formatted_codes}"
+        )
+
+
+def _validate_required_ids(df_lookup: pl.DataFrame) -> None:
+    """Raise an error when a required lookup identifier is null."""
+    null_counts = {
+        column_name: df_lookup.get_column(column_name).null_count()
+        for column_name in REQUIRED_ID_COLUMNS
+    }
+    invalid_counts = {
+        column_name: null_count
+        for column_name, null_count in null_counts.items()
+        if null_count > 0
+    }
+    if invalid_counts:
+        formatted_counts = ", ".join(
+            f"{column_name}={null_count}"
+            for column_name, null_count in invalid_counts.items()
+        )
+        raise ValueError(
+            f"Player lookup contains null identifiers: {formatted_counts}"
+        )
+
+
+def _validate_two_teams_per_game(df_lookup: pl.DataFrame) -> None:
+    """Raise an error unless every game contains exactly two teams."""
+    invalid_games = (
+        df_lookup.group_by("game_id")
+        .agg(pl.col("team_id").n_unique().alias("team_count"))
+        .filter(pl.col("team_count") != 2)
+        .sort("game_id")
+    )
+    if not invalid_games.is_empty():
+        game_counts = ", ".join(
+            f"{game_id}={team_count}"
+            for game_id, team_count in invalid_games.iter_rows()
+        )
+        raise ValueError(
+            "Each game must contain exactly two teams; found: "
+            f"{game_counts}"
+        )
+
+
+def _validate_unique_key(
+    df_lookup: pl.DataFrame,
+    key_columns: tuple[str, ...],
+) -> None:
+    """Raise an error when a composite lookup key is duplicated."""
+    duplicate_keys = (
+        df_lookup.group_by(key_columns)
+        .len(name="key_count")
+        .filter(pl.col("key_count") > 1)
+        .sort(key_columns)
+    )
+    if not duplicate_keys.is_empty():
+        key_name = ", ".join(key_columns)
+        duplicate_values = ", ".join(
+            str(tuple(row[:-1]))
+            for row in duplicate_keys.iter_rows()
+        )
+        raise ValueError(
+            f"Duplicate player lookup key ({key_name}): "
+            f"{duplicate_values}"
         )
 
 
@@ -146,3 +228,46 @@ def read_roster_file(roster_path: str | Path) -> pl.DataFrame:
         .cast(PLAYER_GAME_SCHEMA)
         .select(PLAYER_GAME_COLUMNS)
     )
+
+
+def build_player_game_lookup(roster_dir: str | Path) -> pl.DataFrame:
+    """Build and validate a player-game lookup from roster files.
+
+    Args:
+        roster_dir: Directory containing game-ID-named roster files.
+
+    Returns:
+        A sorted player-game table spanning every roster file.
+
+    Raises:
+        FileNotFoundError: If the directory or roster files are absent.
+        ValueError: If an input roster violates lookup invariants.
+    """
+    roster_dir = Path(roster_dir)
+    if not roster_dir.is_dir():
+        raise FileNotFoundError(
+            f"Roster directory does not exist: {roster_dir}"
+        )
+
+    roster_paths = sorted(roster_dir.glob("*.json"))
+    if not roster_paths:
+        raise FileNotFoundError(
+            f"No roster JSON files found in: {roster_dir}"
+        )
+
+    roster_frames = []
+    for roster_path in roster_paths:
+        df_roster = read_roster_file(roster_path)
+        if df_roster.is_empty():
+            raise ValueError(
+                f"Roster file contains no players: {roster_path}"
+            )
+        roster_frames.append(df_roster)
+
+    df_lookup = pl.concat(roster_frames, how="vertical")
+    _validate_required_ids(df_lookup)
+    _validate_two_teams_per_game(df_lookup)
+    _validate_unique_key(df_lookup, PLAYER_LOOKUP_KEYS)
+    _validate_unique_key(df_lookup, TRACKING_LOOKUP_KEYS)
+
+    return df_lookup.sort(PLAYER_LOOKUP_KEYS)
