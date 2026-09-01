@@ -42,7 +42,7 @@ POSITION_MAPPER = {
     "RS": "Forward",
 }
 
-PLAYER_GAME_COLUMNS = (
+ROSTER_PLAYER_COLUMNS = (
     "game_id",
     "team_id",
     "player_id",
@@ -54,7 +54,7 @@ PLAYER_GAME_COLUMNS = (
     "started",
 )
 
-PLAYER_GAME_SCHEMA = {
+ROSTER_PLAYER_SCHEMA = {
     "game_id": pl.Int64,
     "team_id": pl.Int64,
     "player_id": pl.Int64,
@@ -64,6 +64,24 @@ PLAYER_GAME_SCHEMA = {
     "player_name": pl.String,
     "team_name": pl.String,
     "started": pl.Boolean,
+}
+
+PLAYER_LOOKUP_COLUMNS = (
+    "game_id",
+    "team_id",
+    "opponent_id",
+    "player_id",
+    "shirt_number",
+    "position_group_type",
+    "player_position_group",
+    "player_name",
+    "team_name",
+    "started",
+)
+
+PLAYER_LOOKUP_SCHEMA = {
+    **ROSTER_PLAYER_SCHEMA,
+    "opponent_id": pl.Int64,
 }
 
 PLAYER_LOOKUP_KEYS = (
@@ -225,8 +243,52 @@ def read_roster_file(roster_path: str | Path) -> pl.DataFrame:
             )
             .alias("player_position_group")
         )
-        .cast(PLAYER_GAME_SCHEMA)
-        .select(PLAYER_GAME_COLUMNS)
+        .cast(ROSTER_PLAYER_SCHEMA)
+        .select(ROSTER_PLAYER_COLUMNS)
+    )
+
+
+def add_opponent_ids(df_lookup: pl.DataFrame) -> pl.DataFrame:
+    """Add the opposing team identifier to every player-game row.
+
+    Args:
+        df_lookup: Validated player rows with two teams per game.
+
+    Returns:
+        Player rows with a non-null `opponent_id` column.
+
+    Raises:
+        ValueError: If required IDs or team cardinality are invalid.
+    """
+    _validate_required_ids(df_lookup)
+    _validate_two_teams_per_game(df_lookup)
+
+    df_teams = df_lookup.select("game_id", "team_id").unique()
+    df_opponents = (
+        df_teams.join(
+            df_teams.rename({"team_id": "opponent_id"}),
+            on="game_id",
+            how="inner",
+        )
+        .filter(pl.col("team_id") != pl.col("opponent_id"))
+        .sort(("game_id", "team_id"))
+    )
+    df_out = df_lookup.join(
+        df_opponents,
+        on=("game_id", "team_id"),
+        how="left",
+        validate="m:1",
+    )
+    if df_out.height != df_lookup.height:
+        raise RuntimeError(
+            "Opponent join changed the player lookup row count"
+        )
+    if df_out.get_column("opponent_id").null_count() > 0:
+        raise RuntimeError("Opponent join produced null opponent IDs")
+
+    return (
+        df_out.cast(PLAYER_LOOKUP_SCHEMA)
+        .select(PLAYER_LOOKUP_COLUMNS)
     )
 
 
@@ -270,4 +332,4 @@ def build_player_game_lookup(roster_dir: str | Path) -> pl.DataFrame:
     _validate_unique_key(df_lookup, PLAYER_LOOKUP_KEYS)
     _validate_unique_key(df_lookup, TRACKING_LOOKUP_KEYS)
 
-    return df_lookup.sort(PLAYER_LOOKUP_KEYS)
+    return add_opponent_ids(df_lookup).sort(PLAYER_LOOKUP_KEYS)
