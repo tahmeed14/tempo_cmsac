@@ -26,7 +26,8 @@ POSSESSION_COLUMNS = (
     "match_team_player_possession_id",
     "player_possession_sequence_number",
     "elapsed_seconds_team_possession",
-    "ball_speed_tempo_player"
+    "ball_speed_tempo_player",
+    "starting_pitch_third",
 )
 
 JOIN_KEYS = (
