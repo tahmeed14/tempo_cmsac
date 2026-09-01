@@ -14,12 +14,23 @@ _GAME_COLUMN = "game_id"
 _FRAME_COLUMN = "framenum"
 _DISPLACEMENT_COLUMN = "ball_displacement"
 _DELTA_FRAME_COLUMN = "delta_frame"
+_PITCH_THIRD_COLUMN = "pitch_third"
 _TEAM_POSSESSION_COLUMN = "dev_match_team_possession_id"
 _PLAYER_POSSESSION_COLUMN = "dev_match_team_player_possession_id"
 _OUTPUT_TEAM_POSSESSION_COLUMN = "match_team_possession_id"
 _OUTPUT_PLAYER_POSSESSION_COLUMN = "match_team_player_possession_id"
 _UNIQUE_PLAYER_POSSESSION_COUNT = "unique_player_possession_count"
 _TEAM_START_FRAME_COLUMN = "__team_possession_start_frame"
+_STARTING_PITCH_THIRD_COLUMN = "starting_pitch_third"
+_PITCH_THIRD_CHANGE_COUNT_COLUMN = "pitch_third_change_count"
+_VERTICAL_PITCH_THIRD_CHANGE_COUNT_COLUMN = (
+    "pitch_third_change_count_vertical"
+)
+_PITCH_THIRD_RANKS = {
+    "Defensive": 0,
+    "Middle": 1,
+    "Attacking": 2,
+}
 _POSSESSION_COLUMNS: dict[PossessionLevel, str] = {
     "team": _TEAM_POSSESSION_COLUMN,
     "player": _PLAYER_POSSESSION_COLUMN,
@@ -40,6 +51,7 @@ def _validate_tempo_inputs(
         _FRAME_COLUMN,
         _DISPLACEMENT_COLUMN,
         _DELTA_FRAME_COLUMN,
+        _PITCH_THIRD_COLUMN,
         FRAME_RATE_COLUMN,
     ]
     if level == "team":
@@ -72,6 +84,63 @@ def _validate_tempo_inputs(
         )
 
     return possession_column
+
+
+def _ordered_pitch_thirds() -> pl.Expr:
+    """Return non-null pitch thirds in chronological frame order."""
+    return (
+        pl.col(_PITCH_THIRD_COLUMN)
+        .sort_by(pl.col(_FRAME_COLUMN))
+        .drop_nulls()
+    )
+
+
+def starting_pitch_third() -> pl.Expr:
+    """Retain the pitch third at a possession's earliest frame."""
+    return (
+        pl.col(_PITCH_THIRD_COLUMN)
+        .sort_by(pl.col(_FRAME_COLUMN))
+        .first()
+        .alias(_STARTING_PITCH_THIRD_COLUMN)
+    )
+
+
+def pitch_third_change_count() -> pl.Expr:
+    """Count chronological transitions between pitch thirds."""
+    ordered_pitch_thirds = _ordered_pitch_thirds()
+    return (
+        (ordered_pitch_thirds != ordered_pitch_thirds.shift(1))
+        .fill_null(False)
+        .sum()
+        .cast(pl.UInt32)
+        .alias(_PITCH_THIRD_CHANGE_COUNT_COLUMN)
+    )
+
+
+def pitch_third_change_count_vertical() -> pl.Expr:
+    """Count chronological pitch-third transitions toward attack."""
+    ordered_pitch_third_ranks = (
+        pl.col(_PITCH_THIRD_COLUMN)
+        .cast(pl.String)
+        .replace_strict(
+            _PITCH_THIRD_RANKS,
+            default=None,
+            return_dtype=pl.Int8,
+        )
+        .sort_by(pl.col(_FRAME_COLUMN))
+        .drop_nulls()
+    )
+    return (
+        (
+            ordered_pitch_third_ranks
+            - ordered_pitch_third_ranks.shift(1)
+            > 0
+        )
+        .fill_null(False)
+        .sum()
+        .cast(pl.UInt32)
+        .alias(_VERTICAL_PITCH_THIRD_CHANGE_COUNT_COLUMN)
+    )
 
 
 def _level_metadata_expressions(
@@ -167,12 +236,12 @@ def aggregate_possession_tempo(
         df: Lazy frame-level rows with ball movement metrics.
         level: Team or player possession granularity.
     Returns:
-        One row per possession with frame bounds, valid segment count,
-        total displacement, elapsed frames, and ball tempo. Metrics are
-        null when a possession has no valid movement segment. Team rows
-        also count their distinct non-null player possessions. Player
-        rows include their team ID, chronological sequence, and elapsed
-        time from the true team-possession start.
+        One row per possession with frame bounds, pitch-third movement,
+        valid segment count, total displacement, elapsed frames, and ball
+        tempo. Metrics are null when a possession has no valid movement
+        segment. Team rows also count their distinct non-null player
+        possessions. Player rows include their team ID, chronological
+        sequence, and elapsed time from the true team-possession start.
     """
     possession_column = _validate_tempo_inputs(
         df,
@@ -228,6 +297,9 @@ def aggregate_possession_tempo(
         "start_frame",
         "end_frame",
         *metadata_columns,
+        _STARTING_PITCH_THIRD_COLUMN,
+        _PITCH_THIRD_CHANGE_COUNT_COLUMN,
+        _VERTICAL_PITCH_THIRD_CHANGE_COUNT_COLUMN,
         FRAME_RATE_COLUMN,
         "valid_segment_count",
         "total_ball_displacement",
@@ -243,6 +315,9 @@ def aggregate_possession_tempo(
             pl.col(_FRAME_COLUMN).min().alias("start_frame"),
             pl.col(_FRAME_COLUMN).max().alias("end_frame"),
             *metadata_expressions,
+            starting_pitch_third(),
+            pitch_third_change_count(),
+            pitch_third_change_count_vertical(),
             valid_segment.sum()
             .cast(pl.UInt32)
             .alias("valid_segment_count"),
@@ -306,6 +381,9 @@ def aggregate_possession_tempo(
         "end_frame",
         "elapsed_frames_team_possession",
         "elapsed_seconds_team_possession",
+        _STARTING_PITCH_THIRD_COLUMN,
+        _PITCH_THIRD_CHANGE_COUNT_COLUMN,
+        _VERTICAL_PITCH_THIRD_CHANGE_COUNT_COLUMN,
         FRAME_RATE_COLUMN,
         "valid_segment_count",
         "total_ball_displacement",
