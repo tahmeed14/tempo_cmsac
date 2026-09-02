@@ -1,6 +1,8 @@
 """Build processed event datasets for configured matches."""
 
 import logging
+from pathlib import Path
+from time import perf_counter
 
 from tempoctrl.gradient_sports.event_features import features_events
 from tempoctrl.gradient_sports.event_load import load_events
@@ -9,31 +11,88 @@ from tempoctrl.gradient_sports.event_transform import (
     transform_events,
 )
 from tempoctrl.gradient_sports.ingest import read_events
-from tempoctrl.pipeline_runtime import log_pipeline_runtime
+from tempoctrl.pipeline_runtime import format_pipeline_runtime
 
 logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
+PIPELINE_DIVIDER = "=" * 72
+RAW_EVENTS_DIRECTORY = Path("data/raw/gradient_sports/events")
 
 
-def run_pipeline(match_id: int) -> None:
+def configure_logging() -> None:
+    """Configure logging at the executable pipeline boundary."""
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
+
+
+def discover_event_files(
+    input_dir: str | Path = RAW_EVENTS_DIRECTORY,
+) -> tuple[tuple[int, Path], ...]:
+    """Discover raw event files and their numeric match IDs."""
+    input_directory = Path(input_dir)
+    if not input_directory.is_dir():
+        raise FileNotFoundError(
+            f"Raw event directory does not exist: {input_directory}"
+        )
+
+    event_files = sorted(input_directory.glob("*.json"))
+    if not event_files:
+        raise FileNotFoundError(
+            f"No raw event JSON files found in: {input_directory}"
+        )
+
+    discovered_files: list[tuple[int, Path]] = []
+    for event_path in event_files:
+        try:
+            match_id = int(event_path.stem)
+        except ValueError as error:
+            raise ValueError(
+                "Raw event filenames must be numeric match IDs: "
+                f"{event_path.name}"
+            ) from error
+        discovered_files.append((match_id, event_path))
+
+    return tuple(sorted(discovered_files))
+
+
+def run_pipeline(
+    match_id: int,
+    event_path: str | Path | None = None,
+) -> tuple[Path, Path]:
     """Build processed event data for one match."""
-    local_path = f"data/raw/gradient_sports/events/{match_id}.json"
-    df = read_events(local_path)
+    input_path = (
+        Path(event_path)
+        if event_path is not None
+        else RAW_EVENTS_DIRECTORY / f"{match_id}.json"
+    )
+    df = read_events(input_path)
     df = transform_events(df)
     df = features_events(df)
     df = cleanup_events(df)
-    load_events(df)
+    output_paths = load_events(df)
+    for output_path in output_paths:
+        logger.info("Event pipeline output: %s", output_path)
+    return output_paths
 
 
 def main() -> None:
     """Build event outputs and log the complete pipeline runtime."""
-    with log_pipeline_runtime(logger, "Event"):
-        for match_id in range(10514, 10518):
-            run_pipeline(match_id)
+    configure_logging()
+    logger.info(PIPELINE_DIVIDER)
+    logger.info("EVENT PIPELINE")
+    logger.info(PIPELINE_DIVIDER)
+    started_at = perf_counter()
+    try:
+        for match_id, event_path in discover_event_files():
+            logger.info("Processing event file: %s", event_path)
+            run_pipeline(match_id, event_path)
+    finally:
+        logger.info(
+            "Event pipeline runtime: %s",
+            format_pipeline_runtime(perf_counter() - started_at),
+        )
+        logger.info(PIPELINE_DIVIDER + "\n")
 
 
 if __name__ == "__main__":
