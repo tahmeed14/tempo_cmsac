@@ -74,7 +74,7 @@ def main() -> None:
             "Player lookup pipeline runtime: %s",
             format_pipeline_runtime(perf_counter() - started_at),
         )
-        logger.info(PIPELINE_DIVIDER)
+        logger.info(PIPELINE_DIVIDER + "\n")
 
 
 if __name__ == "__main__":
