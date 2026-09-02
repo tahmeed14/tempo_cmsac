@@ -22,6 +22,48 @@ def read_events(local_path: str | Path) -> pl.DataFrame:
     return df.with_row_index("event_number", offset = 1)
 
 
+def resolve_tracking_paths(
+    match_id: int | str,
+    raw_path: str | Path | None = None,
+) -> tuple[Path, Path]:
+    """Return the raw and staged paths for one tracking match."""
+    resolved_raw_path = (
+        Path(raw_path)
+        if raw_path is not None
+        else Path(
+            f"data/raw/gradient_sports/tracking/{match_id}.jsonl.bz2"
+        )
+    )
+    staged_path = Path(
+        f"data/staged/gradient_sports/tracking/{match_id}.parquet"
+    )
+    return resolved_raw_path, staged_path
+
+
+def tracking_stage_is_current(
+    match_id: int | str,
+    overwrite: bool = False,
+    *,
+    raw_path: str | Path | None = None,
+) -> bool:
+    """Return whether an existing staged file can be reused."""
+    resolved_raw_path, staged_path = resolve_tracking_paths(
+        match_id,
+        raw_path,
+    )
+    if not resolved_raw_path.is_file():
+        raise FileNotFoundError(
+            f"Raw tracking file not found: {resolved_raw_path}"
+        )
+
+    return (
+        staged_path.is_file()
+        and staged_path.stat().st_mtime
+        >= resolved_raw_path.stat().st_mtime
+        and not overwrite
+    )
+
+
 def stage_tracking(
     match_id: int | str,
     overwrite: bool = False,
@@ -29,35 +71,21 @@ def stage_tracking(
     raw_path: str | Path | None = None,
 ) -> Path:
     """Stage one raw tracking file and return its parquet path."""
-
-    raw_path = (
-        Path(raw_path)
-        if raw_path is not None
-        else Path(
-            f"data/raw/gradient_sports/tracking/{match_id}.jsonl.bz2"
-        )
-    )
-    staged_path = f"data/staged/gradient_sports/tracking/{match_id}.parquet"
-
-    staged_path = Path(staged_path)
-
-    if not raw_path.exists():
-        raise FileNotFoundError(
-            f"Raw tracking file not found: {raw_path}"
-        )
-
-    stage_is_current = (
-        staged_path.exists()
-        and staged_path.stat().st_mtime >= raw_path.stat().st_mtime
-        and not overwrite
+    resolved_raw_path, staged_path = resolve_tracking_paths(
+        match_id,
+        raw_path,
     )
 
-    if stage_is_current:
+    if tracking_stage_is_current(
+        match_id,
+        overwrite,
+        raw_path=resolved_raw_path,
+    ):
         return staged_path
 
     staged_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with bz2.open(raw_path, "rb") as file:
+    with bz2.open(resolved_raw_path, "rb") as file:
         (
             pl.scan_ndjson(
                 file,

@@ -5,8 +5,10 @@ from pathlib import Path
 from time import perf_counter
 
 from tempoctrl.gradient_sports.ingest import (
+    resolve_tracking_paths,
     scan_tracking,
     stage_tracking,
+    tracking_stage_is_current,
 )
 from tempoctrl.gradient_sports.tracking_load import load_tracking
 from tempoctrl.gradient_sports.tracking_transform import transform_tracking
@@ -66,6 +68,21 @@ def run_pipeline(
     tracking_path: str | Path | None = None,
 ) -> tuple[Path, Path]:
     """Build processed tracking data for one match."""
+    raw_path, expected_staged_path = resolve_tracking_paths(
+        match_id,
+        tracking_path,
+    )
+    if tracking_stage_is_current(match_id, raw_path=raw_path):
+        logger.info(
+            "Loading staged tracking file: %s",
+            expected_staged_path,
+        )
+    else:
+        logger.info(
+            "Processing raw tracking file (staging may take longer): %s",
+            raw_path,
+        )
+
     staged_path = stage_tracking(match_id, raw_path=tracking_path)
     df_out = scan_tracking(staged_path)
     df_out = transform_tracking(df_out)
@@ -89,7 +106,6 @@ def main() -> None:
     started_at = perf_counter()
     try:
         for match_id, tracking_path in discover_tracking_files():
-            logger.info("Processing tracking file: %s", tracking_path)
             run_pipeline(match_id, tracking_path)
     finally:
         logger.info(
