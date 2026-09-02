@@ -130,10 +130,43 @@ def lock_reference_levels(df: pl.LazyFrame) -> pl.LazyFrame:
             .pipe(lock_pressure_levels)
             )
 
+def add_log_sequence(
+    df: pl.DataFrame,
+    source_col: str = "player_possession_sequence_number",
+) -> pl.DataFrame:
+    """
+    Add log1p-transformed and standardized possession-sequence 
+    variables.
+
+    Creates:
+        player_possession_sequence_log
+        player_possession_sequence_log_z
+    """
+
+    log_col = "player_possession_sequence_log"
+    z_col = "player_possession_sequence_log_z"
+
+    df = df.with_columns(
+        pl.col(source_col)
+        .cast(pl.Float64)
+        .log1p()
+        .alias(log_col)
+    )
+
+    df = df.with_columns(
+        (
+            (pl.col(log_col) - pl.col(log_col).mean())
+            / pl.col(log_col).std()
+        ).alias(z_col)
+    )
+
+    return df
+
 def transform_model_data(df: pl.LazyFrame) -> pl.LazyFrame:
     return (df
             .pipe(filter_model_data) #FIXME:
             .pipe(reclassify_setpiece_type)
             .pipe(categorize_defender_num_challenges)
             .pipe(lock_reference_levels)
-            )
+            .pipe(add_log_sequence)
+        )
