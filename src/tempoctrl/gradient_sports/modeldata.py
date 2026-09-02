@@ -1,5 +1,21 @@
+"""Build the dataset used for Bayesian modeling."""
+
+import logging
+from pathlib import Path
 
 import polars as pl
+
+logger = logging.getLogger(__name__)
+
+EVENTS_PATH = Path("data/processed/gradient_sports/events")
+PLAYER_POSSESSIONS_PATH = Path(
+    "data/analysis/player_possessions.parquet"
+)
+POSSESSION_LOOKUP_PATH = Path(
+    "data/curated/gradient_sports/possession_lookup/"
+    "match_possession_lookup.parquet"
+)
+MODELDATA_PATH = Path("data/analysis/modeldata_v0.parquet")
 
 EVENT_FEATURES = (
     "event_number",
@@ -13,12 +29,12 @@ EVENT_FEATURES = (
     "first_touch_ballheight",
     "first_touch_bodypart",
     "first_touch_defender_pressure_type",
-    # "defender_pressure_type",
     "defender_num_challenges",
     "game_id",
     "game_period",
     "match_team_possession_id",
-    "match_team_player_possession_id")
+    "match_team_player_possession_id",
+)
 
 POSSESSION_COLUMNS = (
     "game_id",
@@ -32,67 +48,88 @@ POSSESSION_COLUMNS = (
     "starting_pitch_third",
 )
 
-JOIN_KEYS = (
+EVENT_JOIN_KEYS = (
     "game_id",
     "match_team_possession_id",
     "match_team_player_possession_id",
 )
-
-MODEL_ORDER = (
+POSSESSION_LOOKUP_JOIN_KEY = (
     "game_id",
-    "player_id",
-    "playername",
-    "team_id",
-    "teamname",
+    "match_team_player_possession_id",
 )
 
-DROP_COLUMNS_LOOKUP = (
+LOOKUP_IDENTITY_COLUMNS = (
     "player_id",
     "playername",
     "teamname",
     "team_id",
 )
 
-def load_modeldata():
-    dir_root = "data/processed/gradient_sports/"
 
-    events_df = (
-        pl.scan_parquet(f"{dir_root}events")
-        .select(*EVENT_FEATURES)
+def prepare_events(df_events: pl.LazyFrame) -> pl.LazyFrame:
+    """Select one representative event for each player possession."""
+    return (
+        df_events.select(EVENT_FEATURES)
         .sort(("game_id", "event_number"), nulls_last=True)
         .unique(
-            subset=["match_team_player_possession_id"],
+            subset=[POSSESSION_LOOKUP_JOIN_KEY],
             keep="first",
             maintain_order=True,
         )
-        )
-    
-    player_poss_df = (
-        pl.scan_parquet(f"data/analysis/player_possessions.parquet")
-        .select(*POSSESSION_COLUMNS))
-
-    possession_lookup_df = (
-        pl.scan_parquet(f"data/curated/gradient_sports/possession_lookup/match_possession_lookup.parquet")
-        .drop(*DROP_COLUMNS_LOOKUP)
     )
 
-    model_df = (
-        player_poss_df
-        .join(
-            events_df,
-            on=JOIN_KEYS,
-            how="left",
-            validate="1:1"
-        )
-        .join(possession_lookup_df,
-              on = "match_team_player_possession_id",
-              how = "left",
-              validate = "1:1")
-    )
-    
-    print(model_df.collect().shape)
 
-    model_df.sink_parquet(
-        "data/analysis/modeldata_v0.parquet",
-        compression="zstd"
+def join_event_features(
+    df_player_possessions: pl.LazyFrame,
+    df_events: pl.LazyFrame,
+) -> pl.LazyFrame:
+    """Add event features while preserving every player possession."""
+    return df_player_possessions.join(
+        df_events,
+        on=EVENT_JOIN_KEYS,
+        how="left",
+        validate="1:1",
     )
+
+
+def join_possession_lookup(
+    df_model: pl.LazyFrame,
+    df_possession_lookup: pl.LazyFrame,
+) -> pl.LazyFrame:
+    """Add possession attributes while preserving every model row."""
+    return df_model.join(
+        df_possession_lookup,
+        on=POSSESSION_LOOKUP_JOIN_KEY,
+        how="left",
+        validate="1:1",
+    )
+
+
+def build_modeldata(
+    df_player_possessions: pl.LazyFrame,
+    df_events: pl.LazyFrame,
+    df_possession_lookup: pl.LazyFrame,
+) -> pl.LazyFrame:
+    """Build model data from player possessions, events, and metadata."""
+    return (
+        df_player_possessions.pipe(join_event_features, df_events)
+        .pipe(join_possession_lookup, df_possession_lookup)
+    )
+
+
+def load_modeldata() -> None:
+    """Build model data from project Parquet datasets and write it."""
+    df_events = pl.scan_parquet(EVENTS_PATH).pipe(prepare_events)
+    df_player_possessions = pl.scan_parquet(
+        PLAYER_POSSESSIONS_PATH
+    ).select(POSSESSION_COLUMNS)
+    df_possession_lookup = pl.scan_parquet(POSSESSION_LOOKUP_PATH).drop(
+        LOOKUP_IDENTITY_COLUMNS
+    )
+
+    build_modeldata(
+        df_player_possessions,
+        df_events,
+        df_possession_lookup,
+    ).sink_parquet(MODELDATA_PATH, compression="zstd")
+    logger.info("Wrote model data: %s", MODELDATA_PATH)
