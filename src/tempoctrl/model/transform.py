@@ -21,6 +21,12 @@ PRESSURE_ORDER = pl.Enum([
     "Pressured (inc. Attempted Pressure)"
 ])
 
+DEFENDER_CHALLENGES_ORDER = pl.Enum([
+    "None",
+    "1",
+    "2+",
+])
+
 POSITION_GROUP_ORDER = pl.Enum([
     "Midfielder",
     "Goalkeeper",
@@ -30,6 +36,10 @@ POSITION_GROUP_ORDER = pl.Enum([
     "Forward",
 
 ])
+
+PERIOD_ORDER = pl.Enum(
+    ["1", "2", "AET"]
+)
 
 #FIXME:
 def filter_model_data(df : pl.LazyFrame):
@@ -60,6 +70,26 @@ def reclassify_setpiece_type(df: pl.LazyFrame | pl.DataFrame
         .then(pl.lit("Open Play"))
         .otherwise(pl.lit("Dead Ball"))
         .alias("setpiecetype")
+    )
+
+def categorize_defender_num_challenges(
+    df: pl.LazyFrame | pl.DataFrame,
+) -> pl.LazyFrame | pl.DataFrame:
+    return df.with_columns(
+        pl.when(pl.col("defender_num_challenges") == 0)
+        .then(pl.lit("None"))
+        .when(pl.col("defender_num_challenges") == 1)
+        .then(pl.lit("1"))
+        .when(pl.col("defender_num_challenges") >= 2)
+        .then(pl.lit("2+"))
+        .otherwise(None)
+        .cast(DEFENDER_CHALLENGES_ORDER)
+        .alias("defender_num_challenges")
+    )
+
+def lock_period_order(df: pl.LazyFrame) -> pl.LazyFrame:
+    return df.with_columns(
+        pl.col("game_period").cast(PERIOD_ORDER)
     )
 
 def lock_setpiece_type_levels(df: pl.LazyFrame) -> pl.LazyFrame:
@@ -104,5 +134,6 @@ def transform_model_data(df: pl.LazyFrame) -> pl.LazyFrame:
     return (df
             .pipe(filter_model_data) #FIXME:
             .pipe(reclassify_setpiece_type)
+            .pipe(categorize_defender_num_challenges)
             .pipe(lock_reference_levels)
             )
