@@ -1,6 +1,7 @@
 """Build frame- and possession-level model datasets."""
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 from time import perf_counter
 
@@ -29,9 +30,11 @@ METADATA_DIRECTORY = Path("data/raw/gradient_sports/metadata")
 
 
 def run_pipeline(
-    df_path: str,
+    df_path: str | Path | Sequence[str | Path],
     *,
     metadata_dir: str | Path,
+    output_dir: str | Path = OUTPUT_DIRECTORY,
+    output_name: str = "possessions.parquet",
     default_frame_rate: float = GRADIENT_SPORTS_DEFAULT_FPS,
 ) -> tuple[Path, ...]:
     """Run possession processing with match-specific FPS metadata."""
@@ -59,8 +62,8 @@ def run_pipeline(
     }
     output_paths = possessions_load(
         df_path=df_path,
-        output_name="possessions.parquet",
-        output_dir=OUTPUT_DIRECTORY,
+        output_name=output_name,
+        output_dir=output_dir,
         frame_rate=frame_rates,
     )
     for output_path in output_paths:

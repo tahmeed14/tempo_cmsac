@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -116,12 +116,12 @@ def _read_metadata_frame_rate(
 
 
 def resolve_gradient_sports_frame_rates(
-    match_dir: str | Path,
+    match_dir: str | Path | Sequence[str | Path],
     metadata_dir: str | Path,
     *,
     default_frame_rate: float = GRADIENT_SPORTS_DEFAULT_FPS,
 ) -> tuple[GameFrameRate, ...]:
-    """Resolve FPS metadata for every integrated match file.
+    """Resolve FPS metadata for selected files or a match directory.
 
     Match IDs come from integrated parquet filenames. This avoids
     scanning tracking rows merely to discover which games are present.
@@ -129,7 +129,8 @@ def resolve_gradient_sports_frame_rates(
     configured global default.
 
     Args:
-        match_dir: Directory of ``<game_id>.parquet`` match files.
+        match_dir: One or more ``<game_id>.parquet`` files, or a
+            directory containing such match files.
         metadata_dir: Directory of optional ``<game_id>.json`` files.
         default_frame_rate: Fallback for missing metadata files.
 
@@ -137,23 +138,45 @@ def resolve_gradient_sports_frame_rates(
         Sorted frame-rate resolutions, one per integrated match.
 
     Raises:
-        FileNotFoundError: If the match directory or parquet files are
-            missing.
+        FileNotFoundError: If the match path or parquet files are missing.
         ValueError: If filenames or existing metadata are invalid.
     """
     _validate_frame_rate_spec(default_frame_rate)
-    match_directory = Path(match_dir)
-    if not match_directory.is_dir():
-        raise FileNotFoundError(
-            f"Integrated match directory does not exist: "
-            f"{match_directory}"
-        )
+    if isinstance(match_dir, (str, Path)):
+        integrated_path = Path(match_dir)
+        if integrated_path.is_file():
+            if integrated_path.suffix != ".parquet":
+                raise ValueError(
+                    "Integrated match file must be Parquet: "
+                    f"{integrated_path}"
+                )
+            match_files = [integrated_path]
+        elif integrated_path.is_dir():
+            match_files = sorted(integrated_path.glob("*.parquet"))
+        else:
+            raise FileNotFoundError(
+                f"Integrated match path does not exist: {integrated_path}"
+            )
+    else:
+        match_files = sorted(Path(path) for path in match_dir)
+        if not match_files:
+            raise ValueError(
+                "At least one integrated match Parquet file is required."
+            )
+        for match_file in match_files:
+            if not match_file.is_file():
+                raise FileNotFoundError(
+                    f"Integrated match file does not exist: {match_file}"
+                )
+            if match_file.suffix != ".parquet":
+                raise ValueError(
+                    f"Integrated match file must be Parquet: {match_file}"
+                )
 
-    match_files = sorted(match_directory.glob("*.parquet"))
     if not match_files:
         raise FileNotFoundError(
             f"No integrated match parquet files found in: "
-            f"{match_directory}"
+            f"{match_dir}"
         )
 
     metadata_directory = Path(metadata_dir)

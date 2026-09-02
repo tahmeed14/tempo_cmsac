@@ -1,5 +1,6 @@
 """Build the dataset used for Bayesian modeling."""
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import polars as pl
@@ -112,19 +113,26 @@ def build_modeldata(
     )
 
 
-def load_modeldata() -> Path:
-    """Build model data, write it, and return the output path."""
-    df_events = pl.scan_parquet(EVENTS_PATH).pipe(prepare_events)
+def load_modeldata(
+    events_path: str | Path | Sequence[str | Path] = EVENTS_PATH,
+    player_possessions_path: str | Path = PLAYER_POSSESSIONS_PATH,
+    possession_lookup_path: str | Path = POSSESSION_LOOKUP_PATH,
+    output_path: str | Path = MODELDATA_PATH,
+) -> Path:
+    """Build model data from selected inputs and return its output path."""
+    output_path = Path(output_path)
+    df_events = pl.scan_parquet(events_path).pipe(prepare_events)
     df_player_possessions = pl.scan_parquet(
-        PLAYER_POSSESSIONS_PATH
+        player_possessions_path
     ).select(POSSESSION_COLUMNS)
-    df_possession_lookup = pl.scan_parquet(POSSESSION_LOOKUP_PATH).drop(
+    df_possession_lookup = pl.scan_parquet(possession_lookup_path).drop(
         LOOKUP_IDENTITY_COLUMNS
     )
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     build_modeldata(
         df_player_possessions,
         df_events,
         df_possession_lookup,
-    ).sink_parquet(MODELDATA_PATH, compression="zstd")
-    return MODELDATA_PATH
+    ).sink_parquet(output_path, compression="zstd")
+    return output_path

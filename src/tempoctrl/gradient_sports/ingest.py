@@ -1,4 +1,5 @@
 import bz2
+from collections.abc import Sequence
 from pathlib import Path
 
 import polars as pl
@@ -109,37 +110,60 @@ def scan_tracking(df_path: str | Path) -> pl.LazyFrame:
     return pl.scan_parquet(df_path)
 
 
-def scan_processed_files(df_path: str | Path,
-                         columns: tuple[str, ...] | None = None
-                        ) -> pl.LazyFrame:
-    """Lazily scan every Parquet file in a directory.
+def scan_processed_files(
+    df_path: str | Path | Sequence[str | Path],
+    columns: tuple[str, ...] | None = None,
+) -> pl.LazyFrame:
+    """Lazily scan one Parquet file or every file in a directory.
 
     Args:
-        df_path: Directory containing integrated match-level Parquet 
-        files.
+        df_path: One or more integrated match-level Parquet files, or a
+            directory containing such files.
 
     Returns:
-        One lazy query spanning all match files.
+        One lazy query spanning the selected match files.
 
     Raises:
-        FileNotFoundError: If the directory or Parquet files do not 
-        exist.
+        FileNotFoundError: If the path or Parquet files do not exist.
     """
-    dir_path = Path(df_path)
-    if not dir_path.is_dir():
-        raise FileNotFoundError(
-            f"Integrated data directory does not exist: {dir_path}"
-        )
+    if isinstance(df_path, (str, Path)):
+        input_path = Path(df_path)
+        if input_path.is_file():
+            if input_path.suffix != ".parquet":
+                raise ValueError(
+                    f"Integrated input file must be Parquet: {input_path}"
+                )
+            parquet_files = [input_path]
+        elif input_path.is_dir():
+            parquet_files = sorted(input_path.glob("*.parquet"))
+        else:
+            raise FileNotFoundError(
+                f"Integrated data path does not exist: {input_path}"
+            )
+    else:
+        parquet_files = sorted(Path(path) for path in df_path)
+        if not parquet_files:
+            raise ValueError(
+                "At least one integrated Parquet file is required."
+            )
+        for parquet_path in parquet_files:
+            if not parquet_path.is_file():
+                raise FileNotFoundError(
+                    f"Integrated data file does not exist: {parquet_path}"
+                )
+            if parquet_path.suffix != ".parquet":
+                raise ValueError(
+                    f"Integrated input file must be Parquet: {parquet_path}"
+                )
 
-    parquet_files = sorted(dir_path.glob("*.parquet"))
     if not parquet_files:
         raise FileNotFoundError(
-            f"No integrated Parquet files found in: {dir_path}"
+            f"No integrated Parquet files found in: {input_path}"
         )
 
     lf_out = pl.scan_parquet(parquet_files)
 
     if columns:
         return lf_out.select(columns)
-    
+
     return lf_out

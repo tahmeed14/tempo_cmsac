@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -178,7 +179,7 @@ def write_possession_outputs(
 
 
 def possessions_load(
-    df_path: str,
+    df_path: str | Path | Sequence[str | Path],
     output_name: str,
     *,
     output_dir: str | Path,
