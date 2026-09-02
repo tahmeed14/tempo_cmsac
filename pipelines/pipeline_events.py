@@ -15,6 +15,7 @@ from tempoctrl.pipeline_runtime import format_pipeline_runtime
 
 logger = logging.getLogger(__name__)
 PIPELINE_DIVIDER = "=" * 72
+RAW_EVENTS_DIRECTORY = Path("data/raw/gradient_sports/events")
 
 
 def configure_logging() -> None:
@@ -25,10 +26,47 @@ def configure_logging() -> None:
     )
 
 
-def run_pipeline(match_id: int) -> tuple[Path, Path]:
+def discover_event_files(
+    input_dir: str | Path = RAW_EVENTS_DIRECTORY,
+) -> tuple[tuple[int, Path], ...]:
+    """Discover raw event files and their numeric match IDs."""
+    input_directory = Path(input_dir)
+    if not input_directory.is_dir():
+        raise FileNotFoundError(
+            f"Raw event directory does not exist: {input_directory}"
+        )
+
+    event_files = sorted(input_directory.glob("*.json"))
+    if not event_files:
+        raise FileNotFoundError(
+            f"No raw event JSON files found in: {input_directory}"
+        )
+
+    discovered_files: list[tuple[int, Path]] = []
+    for event_path in event_files:
+        try:
+            match_id = int(event_path.stem)
+        except ValueError as error:
+            raise ValueError(
+                "Raw event filenames must be numeric match IDs: "
+                f"{event_path.name}"
+            ) from error
+        discovered_files.append((match_id, event_path))
+
+    return tuple(sorted(discovered_files))
+
+
+def run_pipeline(
+    match_id: int,
+    event_path: str | Path | None = None,
+) -> tuple[Path, Path]:
     """Build processed event data for one match."""
-    local_path = f"data/raw/gradient_sports/events/{match_id}.json"
-    df = read_events(local_path)
+    input_path = (
+        Path(event_path)
+        if event_path is not None
+        else RAW_EVENTS_DIRECTORY / f"{match_id}.json"
+    )
+    df = read_events(input_path)
     df = transform_events(df)
     df = features_events(df)
     df = cleanup_events(df)
@@ -46,8 +84,9 @@ def main() -> None:
     logger.info(PIPELINE_DIVIDER)
     started_at = perf_counter()
     try:
-        for match_id in range(10514, 10518):
-            run_pipeline(match_id)
+        for match_id, event_path in discover_event_files():
+            logger.info("Processing event file: %s", event_path)
+            run_pipeline(match_id, event_path)
     finally:
         logger.info(
             "Event pipeline runtime: %s",

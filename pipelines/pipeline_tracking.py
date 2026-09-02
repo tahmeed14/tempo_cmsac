@@ -14,6 +14,7 @@ from tempoctrl.pipeline_runtime import format_pipeline_runtime
 
 logger = logging.getLogger(__name__)
 PIPELINE_DIVIDER = "=" * 72
+RAW_TRACKING_DIRECTORY = Path("data/raw/gradient_sports/tracking")
 
 
 def configure_logging() -> None:
@@ -27,9 +28,45 @@ def configure_logging() -> None:
 OVERWRITE = True
 
 
-def run_pipeline(match_id: int) -> tuple[Path, Path]:
+def discover_tracking_files(
+    input_dir: str | Path = RAW_TRACKING_DIRECTORY,
+) -> tuple[tuple[int, Path], ...]:
+    """Discover raw tracking files and their numeric match IDs."""
+    input_directory = Path(input_dir)
+    if not input_directory.is_dir():
+        raise FileNotFoundError(
+            f"Raw tracking directory does not exist: {input_directory}"
+        )
+
+    tracking_files = sorted(input_directory.glob("*.jsonl.bz2"))
+    if not tracking_files:
+        raise FileNotFoundError(
+            "No raw tracking JSONL.BZ2 files found in: "
+            f"{input_directory}"
+        )
+
+    discovered_files: list[tuple[int, Path]] = []
+    suffix = ".jsonl.bz2"
+    for tracking_path in tracking_files:
+        match_id_text = tracking_path.name.removesuffix(suffix)
+        try:
+            match_id = int(match_id_text)
+        except ValueError as error:
+            raise ValueError(
+                "Raw tracking filenames must be numeric match IDs: "
+                f"{tracking_path.name}"
+            ) from error
+        discovered_files.append((match_id, tracking_path))
+
+    return tuple(sorted(discovered_files))
+
+
+def run_pipeline(
+    match_id: int,
+    tracking_path: str | Path | None = None,
+) -> tuple[Path, Path]:
     """Build processed tracking data for one match."""
-    staged_path = stage_tracking(match_id)
+    staged_path = stage_tracking(match_id, raw_path=tracking_path)
     df_out = scan_tracking(staged_path)
     df_out = transform_tracking(df_out)
     processed_path = load_tracking(
@@ -51,8 +88,9 @@ def main() -> None:
     logger.info(PIPELINE_DIVIDER)
     started_at = perf_counter()
     try:
-        for match_id in range(10514, 10518):
-            run_pipeline(match_id)
+        for match_id, tracking_path in discover_tracking_files():
+            logger.info("Processing tracking file: %s", tracking_path)
+            run_pipeline(match_id, tracking_path)
     finally:
         logger.info(
             "Tracking pipeline runtime: %s",

@@ -4,7 +4,7 @@ from pathlib import Path
 import polars as pl
 
 
-def read_events(local_path : str) -> pl.DataFrame:
+def read_events(local_path: str | Path) -> pl.DataFrame:
     """read and unnest events JSON for a single match.
 
     Reads the raw events JSON for `local_path`, assigns a 1-based
@@ -25,12 +25,20 @@ def read_events(local_path : str) -> pl.DataFrame:
 def stage_tracking(
     match_id: int | str,
     overwrite: bool = False,
+    *,
+    raw_path: str | Path | None = None,
 ) -> Path:
+    """Stage one raw tracking file and return its parquet path."""
 
-    raw_path = f"data/raw/gradient_sports/tracking/{match_id}.jsonl.bz2"
+    raw_path = (
+        Path(raw_path)
+        if raw_path is not None
+        else Path(
+            f"data/raw/gradient_sports/tracking/{match_id}.jsonl.bz2"
+        )
+    )
     staged_path = f"data/staged/gradient_sports/tracking/{match_id}.parquet"
 
-    raw_path = Path(raw_path)
     staged_path = Path(staged_path)
 
     if not raw_path.exists():
