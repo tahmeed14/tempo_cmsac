@@ -1,13 +1,11 @@
 import bz2
-import logging
+from collections.abc import Sequence
 from pathlib import Path
 
 import polars as pl
 
-logger = logging.getLogger(__name__)
 
-
-def read_events(local_path : str) -> pl.DataFrame:
+def read_events(local_path: str | Path) -> pl.DataFrame:
     """read and unnest events JSON for a single match.
 
     Reads the raw events JSON for `local_path`, assigns a 1-based
@@ -25,35 +23,70 @@ def read_events(local_path : str) -> pl.DataFrame:
     return df.with_row_index("event_number", offset = 1)
 
 
-def stage_tracking(
+def resolve_tracking_paths(
+    match_id: int | str,
+    raw_path: str | Path | None = None,
+) -> tuple[Path, Path]:
+    """Return the raw and staged paths for one tracking match."""
+    resolved_raw_path = (
+        Path(raw_path)
+        if raw_path is not None
+        else Path(
+            f"data/raw/gradient_sports/tracking/{match_id}.jsonl.bz2"
+        )
+    )
+    staged_path = Path(
+        f"data/staged/gradient_sports/tracking/{match_id}.parquet"
+    )
+    return resolved_raw_path, staged_path
+
+
+def tracking_stage_is_current(
     match_id: int | str,
     overwrite: bool = False,
-) -> Path:
-
-    raw_path = f"data/raw/gradient_sports/tracking/{match_id}.jsonl.bz2"
-    staged_path = f"data/staged/gradient_sports/tracking/{match_id}.parquet"
-
-    raw_path = Path(raw_path)
-    staged_path = Path(staged_path)
-
-    if not raw_path.exists():
+    *,
+    raw_path: str | Path | None = None,
+) -> bool:
+    """Return whether an existing staged file can be reused."""
+    resolved_raw_path, staged_path = resolve_tracking_paths(
+        match_id,
+        raw_path,
+    )
+    if not resolved_raw_path.is_file():
         raise FileNotFoundError(
-            f"Raw tracking file not found: {raw_path}"
+            f"Raw tracking file not found: {resolved_raw_path}"
         )
 
-    stage_is_current = (
-        staged_path.exists()
-        and staged_path.stat().st_mtime >= raw_path.stat().st_mtime
+    return (
+        staged_path.is_file()
+        and staged_path.stat().st_mtime
+        >= resolved_raw_path.stat().st_mtime
         and not overwrite
     )
 
-    if stage_is_current:
-        logger.debug("Loading staged tracking file: %s", staged_path)
+
+def stage_tracking(
+    match_id: int | str,
+    overwrite: bool = False,
+    *,
+    raw_path: str | Path | None = None,
+) -> Path:
+    """Stage one raw tracking file and return its parquet path."""
+    resolved_raw_path, staged_path = resolve_tracking_paths(
+        match_id,
+        raw_path,
+    )
+
+    if tracking_stage_is_current(
+        match_id,
+        overwrite,
+        raw_path=resolved_raw_path,
+    ):
         return staged_path
 
     staged_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with bz2.open(raw_path, "rb") as file:
+    with bz2.open(resolved_raw_path, "rb") as file:
         (
             pl.scan_ndjson(
                 file,
@@ -61,8 +94,6 @@ def stage_tracking(
             )
             .sink_parquet(staged_path)
         )
-
-    logger.info("Wrote staged tracking file: %s", staged_path)
 
     return staged_path
 
@@ -79,51 +110,60 @@ def scan_tracking(df_path: str | Path) -> pl.LazyFrame:
     return pl.scan_parquet(df_path)
 
 
-def scan_processed_files(df_path: str | Path,
-                         columns: tuple[str, ...] | None = None
-                        ) -> pl.LazyFrame:
-    """Lazily scan every Parquet file in a directory.
+def scan_processed_files(
+    df_path: str | Path | Sequence[str | Path],
+    columns: tuple[str, ...] | None = None,
+) -> pl.LazyFrame:
+    """Lazily scan one Parquet file or every file in a directory.
 
     Args:
-        df_path: Directory containing integrated match-level Parquet 
-        files.
+        df_path: One or more integrated match-level Parquet files, or a
+            directory containing such files.
 
     Returns:
-        One lazy query spanning all match files.
+        One lazy query spanning the selected match files.
 
     Raises:
-        FileNotFoundError: If the directory or Parquet files do not 
-        exist.
+        FileNotFoundError: If the path or Parquet files do not exist.
     """
-    dir_path = Path(df_path)
-    if not dir_path.is_dir():
-        logger.error(
-            "Integrated data directory does not exist: %s",
-            dir_path,
-        )
-        raise FileNotFoundError(
-            f"Integrated data directory does not exist: {dir_path}"
-        )
+    if isinstance(df_path, (str, Path)):
+        input_path = Path(df_path)
+        if input_path.is_file():
+            if input_path.suffix != ".parquet":
+                raise ValueError(
+                    f"Integrated input file must be Parquet: {input_path}"
+                )
+            parquet_files = [input_path]
+        elif input_path.is_dir():
+            parquet_files = sorted(input_path.glob("*.parquet"))
+        else:
+            raise FileNotFoundError(
+                f"Integrated data path does not exist: {input_path}"
+            )
+    else:
+        parquet_files = sorted(Path(path) for path in df_path)
+        if not parquet_files:
+            raise ValueError(
+                "At least one integrated Parquet file is required."
+            )
+        for parquet_path in parquet_files:
+            if not parquet_path.is_file():
+                raise FileNotFoundError(
+                    f"Integrated data file does not exist: {parquet_path}"
+                )
+            if parquet_path.suffix != ".parquet":
+                raise ValueError(
+                    f"Integrated input file must be Parquet: {parquet_path}"
+                )
 
-    parquet_files = sorted(dir_path.glob("*.parquet"))
     if not parquet_files:
-        logger.error(
-            "No integrated Parquet files found in: %s",
-            dir_path,
-        )
         raise FileNotFoundError(
-            f"No integrated Parquet files found in: {dir_path}"
+            f"No integrated Parquet files found in: {input_path}"
         )
-
-    logger.info(
-        "Lazily scanning %d integrated Parquet files from: %s",
-        len(parquet_files),
-        dir_path,
-    )
 
     lf_out = pl.scan_parquet(parquet_files)
 
     if columns:
         return lf_out.select(columns)
-    
+
     return lf_out

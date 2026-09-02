@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -51,6 +52,7 @@ _TEMPO_INPUT_COLUMNS = (
     "dev_match_team_possession_id",
     "dev_match_team_player_possession_id",
     "framenum",
+    "pitch_third",
     "ball_displacement",
     "delta_frame",
     "frame_rate",
@@ -119,7 +121,7 @@ def write_possession_outputs(
     output_name: str,
     *,
     output_dir: str | Path,
-) -> None:
+) -> tuple[Path, ...]:
     """Build and transactionally publish all possession outputs.
 
     The frame parquet is a materialization boundary. Team and player
@@ -132,6 +134,9 @@ def write_possession_outputs(
         frame_df: Fully transformed frame-level possession rows.
         output_name: File name for the frame-level parquet.
         output_dir: Directory receiving all three parquet files.
+
+    Returns:
+        Frame-, team-, and player-level output paths, in that order.
     """
     output_directory = Path(output_dir)
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -170,22 +175,24 @@ def write_possession_outputs(
         _validate_staged_outputs(staged_paths)
         _publish_staged_outputs(staged_paths, target_paths)
 
+    return target_paths
+
 
 def possessions_load(
-    df_path: str,
+    df_path: str | Path | Sequence[str | Path],
     output_name: str,
     *,
     output_dir: str | Path,
     frame_rate: FrameRateSpec,
-) -> None:
-    """Load, transform, and write possession datasets."""
+) -> tuple[Path, ...]:
+    """Load and write possession datasets, returning output paths."""
     frame_df = (
         scan_processed_files(df_path=df_path)
         .pipe(transform_possessions, frame_rate=frame_rate)
         .select(FRAME_LEVEL_ORDER)
     )
 
-    write_possession_outputs(
+    return write_possession_outputs(
         frame_df,
         output_name,
         output_dir=output_dir,

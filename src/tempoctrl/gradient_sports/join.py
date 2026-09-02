@@ -1,9 +1,6 @@
-import logging
 from pathlib import Path
 
 import polars as pl
-
-logger = logging.getLogger(__name__)
 
 JOIN_KEYS = ("game_id", "game_event_id", "possession_event_id")
 JOIN_ISSUES_DIR = Path("data/investigate/join_issues")
@@ -43,11 +40,6 @@ def _save_duplicate_event_join_rows(
     JOIN_ISSUES_DIR.mkdir(parents=True, exist_ok=True)
     output_path = JOIN_ISSUES_DIR / f"{match_id}_duplicate_event_rows.parquet"
     duplicate_rows.write_parquet(output_path, compression="zstd")
-    logger.error(
-        "Saved %d duplicate event join rows to %s",
-        duplicate_rows.height,
-        output_path,
-    )
     return output_path
 
 
@@ -62,16 +54,10 @@ def _scan_processed_match(
     )
 
     if not data_path.is_file():
-        logger.error(
-            "Processed %s file does not exist: %s",
-            dataset_name,
-            data_path,
-        )
         raise FileNotFoundError(
             f"Processed {dataset_name} file does not exist: {data_path}"
         )
 
-    logger.info("Scanning processed %s file: %s", dataset_name, data_path)
     return pl.scan_parquet(data_path)
 
 
@@ -105,7 +91,6 @@ def possession_join(match_id: int | str) -> pl.LazyFrame:
         for column_name in JOIN_KEYS
     ]
     df_events = df_events.with_columns(event_key_casts)
-    logger.debug(df_tracking.select(pl.len()).collect())
 
     df_out = df_tracking.join(
         df_events,
@@ -117,14 +102,14 @@ def possession_join(match_id: int | str) -> pl.LazyFrame:
         validate="m:1",
     )
     try:
-        logger.debug(df_out.select(pl.len()).collect())
-    except pl.exceptions.ComputeError:
+        df_out.select(pl.len()).collect()
+    except pl.exceptions.ComputeError as error:
         try:
             _save_duplicate_event_join_rows(df_events, match_id)
-        except Exception:
-            logger.exception(
-                "Could not save join-validation diagnostics for match %s",
-                match_id,
+        except Exception as diagnostic_error:
+            error.add_note(
+                "Could not save join-validation diagnostics for "
+                f"match {match_id}: {diagnostic_error}"
             )
         raise
 
@@ -134,22 +119,18 @@ def possession_join(match_id: int | str) -> pl.LazyFrame:
 def possession_load(
     match_id: int | str,
     overwrite: bool = False,
-) -> None:
-    """Join and save integrated possession data for one match."""
+) -> Path:
+    """Join and save integrated possession data, returning its path."""
     output_path = Path(
         f"data/integrated/gradient_sports/{match_id}.parquet"
     )
 
     if output_path.is_file() and not overwrite:
-        logger.info(
-            "Integrated possession file already exists: %s",
-            output_path,
-        )
-        return
+        return output_path
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     possession_join(match_id).sink_parquet(
         output_path,
         compression="zstd",
     )
-    logger.info("Wrote integrated possession file: %s", output_path)
+    return output_path
