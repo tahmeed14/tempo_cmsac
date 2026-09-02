@@ -2,20 +2,25 @@
 
 import logging
 from pathlib import Path
+from time import perf_counter
 
 from tempoctrl.gradient_sports.players import (
     PLAYER_LOOKUP_PATH,
     build_player_game_lookup,
     write_player_game_lookup,
 )
-from tempoctrl.pipeline_runtime import log_pipeline_runtime
+from tempoctrl.pipeline_runtime import format_pipeline_runtime
 
 logger = logging.getLogger(__name__)
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
+
+def configure_logging() -> None:
+    """Configure logging at the executable pipeline boundary."""
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
+
 
 ROSTER_DIRECTORY = Path("data/raw/gradient_sports/roster")
 OVERWRITE = True
@@ -56,8 +61,15 @@ def run_pipeline(
 
 def main() -> None:
     """Run the player lookup pipeline with runtime logging."""
-    with log_pipeline_runtime(logger, "Player lookup"):
+    configure_logging()
+    started_at = perf_counter()
+    try:
         run_pipeline()
+    finally:
+        logger.info(
+            "Player lookup pipeline runtime: %s",
+            format_pipeline_runtime(perf_counter() - started_at),
+        )
 
 
 if __name__ == "__main__":

@@ -1,11 +1,6 @@
-"""Runtime logging helpers for executable data pipelines."""
+"""Formatting helpers for executable pipeline runtimes."""
 
 from __future__ import annotations
-
-import logging
-from collections.abc import Iterator
-from contextlib import contextmanager
-from time import perf_counter
 
 
 def format_pipeline_runtime(elapsed_seconds: float) -> str:
@@ -21,21 +16,3 @@ def format_pipeline_runtime(elapsed_seconds: float) -> str:
         f"{minute_count} {minute_unit}, "
         f"{seconds:.3f} seconds"
     )
-
-
-@contextmanager
-def log_pipeline_runtime(
-    logger: logging.Logger,
-    pipeline_name: str,
-) -> Iterator[None]:
-    """Log the total runtime when a pipeline scope exits."""
-    started_at = perf_counter()
-    try:
-        yield
-    finally:
-        elapsed_seconds = perf_counter() - started_at
-        logger.info(
-            "%s pipeline runtime: %s",
-            pipeline_name,
-            format_pipeline_runtime(elapsed_seconds),
-        )

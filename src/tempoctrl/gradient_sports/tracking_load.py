@@ -1,9 +1,6 @@
-import logging
 from pathlib import Path
 
 import polars as pl
-
-logger = logging.getLogger(__name__)
 
 COLUMN_ORDER = (
 
@@ -12,17 +9,17 @@ COLUMN_ORDER = (
 def load_tracking(
     df_in: pl.LazyFrame,
     match_id: int | str,
-    overwrite: bool = False) -> None:
+    overwrite: bool = False,
+) -> Path:
+    """Write processed tracking data and return its output path."""
 
     out_path = Path(
         f"data/processed/gradient_sports/tracking/{match_id}.parquet"
     )
 
     if out_path.exists() and not overwrite:
-        logger.info("Processed tracking file already exists: %s\n" \
-        "Note: Use overwrite to rewrite file", out_path)
-        return
+        return out_path
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df_in.sink_parquet(out_path, compression="zstd")
-    logger.info("Wrote tracking parquet file: %s", out_path)
+    return out_path

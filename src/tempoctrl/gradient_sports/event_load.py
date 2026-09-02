@@ -1,9 +1,6 @@
-import logging
 from pathlib import Path
 
 import polars as pl
-
-logger = logging.getLogger(__name__)
 
 MATCH_POSSESSION_LOOKUP_PATH = Path(
     "data/curated/gradient_sports/possession_lookup/"
@@ -59,10 +56,6 @@ def add_player_metadata(
     """Add available player-game metadata to a possession lookup."""
     player_lookup_path = Path(player_lookup_path)
     if not player_lookup_path.is_file():
-        logger.info(
-            "Player-game lookup does not exist; skipping metadata join: %s",
-            player_lookup_path,
-        )
         return df_possession_lookup
 
     df_player_metadata = (
@@ -119,12 +112,15 @@ def write_match_possession_lookup(
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df_lookup.write_parquet(output_path, compression="zstd")
-    logger.info("Wrote match possession lookup: %s", output_path)
     return output_path
 
 
-def load_events(df_in: pl.DataFrame) -> None:
-    """Write one match of cleaned event data to Parquet."""
+def load_events(df_in: pl.DataFrame) -> tuple[Path, Path]:
+    """Write one match of event data and return both output paths.
+
+    Returns:
+        The event parquet path followed by the possession lookup path.
+    """
     match_ids = (
         df_in.get_column("game_id")
         .drop_nulls()
@@ -140,6 +136,6 @@ def load_events(df_in: pl.DataFrame) -> None:
         f"data/processed/gradient_sports/events/{match_ids[0]}.parquet"
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    write_match_possession_lookup(df_in)
+    possession_lookup_path = write_match_possession_lookup(df_in)
     df_in.write_parquet(output_path, compression="zstd")
-    logger.info("Wrote event Parquet file: %s", output_path)
+    return output_path, possession_lookup_path

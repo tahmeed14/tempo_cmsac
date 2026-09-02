@@ -1,12 +1,8 @@
 """Build player lookup data from Gradient Sports roster files."""
 
-import logging
 from pathlib import Path
 
 import polars as pl
-
-
-logger = logging.getLogger(__name__)
 
 PLAYER_LOOKUP_PATH = Path(
     "data/curated/gradient_sports/metadata_lookup/"
@@ -365,15 +361,10 @@ def write_player_game_lookup(
     """
     output_path = Path(output_path)
     if output_path.is_file() and not overwrite:
-        logger.info(
-            "Player lookup already exists and was not overwritten: %s",
-            output_path,
-        )
         return output_path
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df_lookup.write_parquet(output_path, compression="zstd")
-    logger.info("Wrote player lookup Parquet file: %s", output_path)
     return output_path
 
 

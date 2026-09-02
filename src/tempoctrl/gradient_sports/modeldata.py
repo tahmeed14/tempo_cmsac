@@ -1,11 +1,8 @@
 """Build the dataset used for Bayesian modeling."""
 
-import logging
 from pathlib import Path
 
 import polars as pl
-
-logger = logging.getLogger(__name__)
 
 EVENTS_PATH = Path("data/processed/gradient_sports/events")
 PLAYER_POSSESSIONS_PATH = Path(
@@ -53,10 +50,8 @@ EVENT_JOIN_KEYS = (
     "match_team_possession_id",
     "match_team_player_possession_id",
 )
-POSSESSION_LOOKUP_JOIN_KEY = (
-    "game_id",
-    "match_team_player_possession_id",
-)
+
+POSSESSION_LOOKUP_JOIN_KEY = "match_team_player_possession_id"
 
 LOOKUP_IDENTITY_COLUMNS = (
     "player_id",
@@ -99,7 +94,7 @@ def join_possession_lookup(
     """Add possession attributes while preserving every model row."""
     return df_model.join(
         df_possession_lookup,
-        on=POSSESSION_LOOKUP_JOIN_KEY,
+        on=(POSSESSION_LOOKUP_JOIN_KEY, "game_id"),
         how="left",
         validate="1:1",
     )
@@ -117,8 +112,8 @@ def build_modeldata(
     )
 
 
-def load_modeldata() -> None:
-    """Build model data from project Parquet datasets and write it."""
+def load_modeldata() -> Path:
+    """Build model data, write it, and return the output path."""
     df_events = pl.scan_parquet(EVENTS_PATH).pipe(prepare_events)
     df_player_possessions = pl.scan_parquet(
         PLAYER_POSSESSIONS_PATH
@@ -132,4 +127,4 @@ def load_modeldata() -> None:
         df_events,
         df_possession_lookup,
     ).sink_parquet(MODELDATA_PATH, compression="zstd")
-    logger.info("Wrote model data: %s", MODELDATA_PATH)
+    return MODELDATA_PATH

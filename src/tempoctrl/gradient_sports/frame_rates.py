@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -26,25 +25,6 @@ class GameFrameRate:
     game_id: int
     frame_rate: float
     source: FrameRateSource
-
-
-def log_frame_rate_resolutions(
-    resolutions: tuple[GameFrameRate, ...],
-    logger: logging.Logger,
-) -> None:
-    """Log the FPS and metadata source selected for every match."""
-    for resolution in resolutions:
-        log = (
-            logger.info
-            if resolution.source == "metadata"
-            else logger.warning
-        )
-        log(
-            "Using %.3f FPS for match %d (source: %s)",
-            resolution.frame_rate,
-            resolution.game_id,
-            resolution.source,
-        )
 
 
 def _validate_frame_rate_spec(frame_rate: FrameRateSpec) -> None:

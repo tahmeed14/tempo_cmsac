@@ -1,10 +1,7 @@
 import bz2
-import logging
 from pathlib import Path
 
 import polars as pl
-
-logger = logging.getLogger(__name__)
 
 
 def read_events(local_path : str) -> pl.DataFrame:
@@ -48,7 +45,6 @@ def stage_tracking(
     )
 
     if stage_is_current:
-        logger.debug("Loading staged tracking file: %s", staged_path)
         return staged_path
 
     staged_path.parent.mkdir(parents=True, exist_ok=True)
@@ -61,8 +57,6 @@ def stage_tracking(
             )
             .sink_parquet(staged_path)
         )
-
-    logger.info("Wrote staged tracking file: %s", staged_path)
 
     return staged_path
 
@@ -97,29 +91,15 @@ def scan_processed_files(df_path: str | Path,
     """
     dir_path = Path(df_path)
     if not dir_path.is_dir():
-        logger.error(
-            "Integrated data directory does not exist: %s",
-            dir_path,
-        )
         raise FileNotFoundError(
             f"Integrated data directory does not exist: {dir_path}"
         )
 
     parquet_files = sorted(dir_path.glob("*.parquet"))
     if not parquet_files:
-        logger.error(
-            "No integrated Parquet files found in: %s",
-            dir_path,
-        )
         raise FileNotFoundError(
             f"No integrated Parquet files found in: {dir_path}"
         )
-
-    logger.info(
-        "Lazily scanning %d integrated Parquet files from: %s",
-        len(parquet_files),
-        dir_path,
-    )
 
     lf_out = pl.scan_parquet(parquet_files)
 
