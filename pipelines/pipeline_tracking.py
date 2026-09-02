@@ -13,6 +13,7 @@ from tempoctrl.gradient_sports.tracking_transform import transform_tracking
 from tempoctrl.pipeline_runtime import format_pipeline_runtime
 
 logger = logging.getLogger(__name__)
+PIPELINE_DIVIDER = "=" * 72
 
 
 def configure_logging() -> None:
@@ -45,6 +46,9 @@ def run_pipeline(match_id: int) -> tuple[Path, Path]:
 def main() -> None:
     """Build tracking outputs and log the complete pipeline runtime."""
     configure_logging()
+    logger.info(PIPELINE_DIVIDER)
+    logger.info("TRACKING PIPELINE")
+    logger.info(PIPELINE_DIVIDER)
     started_at = perf_counter()
     try:
         for match_id in range(10514, 10518):
@@ -54,6 +58,7 @@ def main() -> None:
             "Tracking pipeline runtime: %s",
             format_pipeline_runtime(perf_counter() - started_at),
         )
+        logger.info(PIPELINE_DIVIDER)
 
 
 if __name__ == "__main__":

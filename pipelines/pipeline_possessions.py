@@ -13,6 +13,7 @@ from tempoctrl.gradient_sports.possessions_load import possessions_load
 from tempoctrl.pipeline_runtime import format_pipeline_runtime
 
 logger = logging.getLogger(__name__)
+PIPELINE_DIVIDER = "=" * 72
 
 
 def configure_logging() -> None:
@@ -70,6 +71,9 @@ def run_pipeline(
 def main() -> None:
     """Build possession outputs and log the complete pipeline runtime."""
     configure_logging()
+    logger.info(PIPELINE_DIVIDER)
+    logger.info("POSSESSION & TEMPO METRICS PIPELINE")
+    logger.info(PIPELINE_DIVIDER)
     started_at = perf_counter()
     try:
         run_pipeline(
@@ -78,9 +82,10 @@ def main() -> None:
         )
     finally:
         logger.info(
-            "Possession pipeline runtime: %s",
+            "Possession & Tempo Metrics pipeline runtime: %s",
             format_pipeline_runtime(perf_counter() - started_at),
         )
+        logger.info(PIPELINE_DIVIDER + "\n")
 
 
 if __name__ == "__main__":

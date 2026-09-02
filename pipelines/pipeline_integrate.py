@@ -8,6 +8,7 @@ from tempoctrl.gradient_sports.join import possession_load
 from tempoctrl.pipeline_runtime import format_pipeline_runtime
 
 logger = logging.getLogger(__name__)
+PIPELINE_DIVIDER = "=" * 72
 
 
 def configure_logging() -> None:
@@ -31,6 +32,9 @@ def run_pipeline(match_id: int) -> Path:
 def main() -> None:
     """Build integrated possession files for configured matches."""
     configure_logging()
+    logger.info(PIPELINE_DIVIDER)
+    logger.info("INTEGRATION PIPELINE")
+    logger.info(PIPELINE_DIVIDER)
     started_at = perf_counter()
     try:
         for match_id in range(10514, 10518):
@@ -40,6 +44,7 @@ def main() -> None:
             "Integration pipeline runtime: %s",
             format_pipeline_runtime(perf_counter() - started_at),
         )
+        logger.info(PIPELINE_DIVIDER)
 
 
 if __name__ == "__main__":

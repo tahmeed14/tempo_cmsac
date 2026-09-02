@@ -12,6 +12,7 @@ from tempoctrl.gradient_sports.players import (
 from tempoctrl.pipeline_runtime import format_pipeline_runtime
 
 logger = logging.getLogger(__name__)
+PIPELINE_DIVIDER = "=" * 72
 
 
 def configure_logging() -> None:
@@ -62,6 +63,9 @@ def run_pipeline(
 def main() -> None:
     """Run the player lookup pipeline with runtime logging."""
     configure_logging()
+    logger.info(PIPELINE_DIVIDER)
+    logger.info("PLAYER LOOKUP PIPELINE")
+    logger.info(PIPELINE_DIVIDER)
     started_at = perf_counter()
     try:
         run_pipeline()
@@ -70,6 +74,7 @@ def main() -> None:
             "Player lookup pipeline runtime: %s",
             format_pipeline_runtime(perf_counter() - started_at),
         )
+        logger.info(PIPELINE_DIVIDER)
 
 
 if __name__ == "__main__":
