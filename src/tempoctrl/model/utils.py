@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import arviz as az
 import pandas as pd
@@ -10,6 +10,14 @@ import polars as pl
 import xarray as xr
 
 _SAMPLE_DIMS = ("chain", "draw")
+_EFFECT_STATISTIC_COLUMNS = (
+    "rank",
+    "posterior_mean",
+    "posterior_sd",
+    "hdi_lower",
+    "hdi_upper",
+    "p_gt_zero",
+)
 
 
 def summarize_player_effects(
@@ -182,5 +190,150 @@ def build_player_effects_table(
             on=player_id_column,
             how="left",
         )
-        .sort("posterior_mean")
+        .sort(
+            by=["posterior_mean", player_id_column],
+            descending=[True, False],
+        )
+        .with_row_index("rank", offset=1)
+    )
+
+
+def discover_archetypes(
+    mu_table: pl.DataFrame,
+    shape_table: pl.DataFrame,
+    *,
+    mu_range: tuple[int, int] | tuple[float, float],
+    shape_range: tuple[int, int] | tuple[float, float],
+    option: Literal["rank", "value"] = "rank",
+    player_id_column: str = "player_id",
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    """Filter mu and shape player tables independently and jointly.
+
+    ``mu_table`` should be built for ``"1|player_id"`` and ``shape_table``
+    for ``"alpha_1|player_id"``. Both range endpoints are inclusive.
+
+    When ``option="rank"``, rank 1 represents the highest posterior mean.
+    When ``option="value"``, ranges are applied to ``posterior_mean``.
+
+    Returns the filtered mu table, filtered shape table, and a combined table
+    containing only players that satisfy both filters. Posterior fields in the
+    combined table are prefixed with ``mu_`` and ``shape_``.
+    """
+    if option not in {"rank", "value"}:
+        raise ValueError("option must be either 'rank' or 'value'.")
+
+    filter_column = "rank" if option == "rank" else "posterior_mean"
+    _validate_archetype_table(
+        mu_table,
+        table_name="mu_table",
+        player_id_column=player_id_column,
+        filter_column=filter_column,
+    )
+    _validate_archetype_table(
+        shape_table,
+        table_name="shape_table",
+        player_id_column=player_id_column,
+        filter_column=filter_column,
+    )
+    _validate_archetype_range(mu_range, range_name="mu_range", option=option)
+    _validate_archetype_range(
+        shape_range,
+        range_name="shape_range",
+        option=option,
+    )
+
+    mu_matches = _filter_archetype_table(mu_table, mu_range, filter_column)
+    shape_matches = _filter_archetype_table(
+        shape_table,
+        shape_range,
+        filter_column,
+    )
+
+    mu_statistics = [
+        column
+        for column in _EFFECT_STATISTIC_COLUMNS
+        if column in mu_matches.columns
+    ]
+    shape_statistics = [
+        column
+        for column in _EFFECT_STATISTIC_COLUMNS
+        if column in shape_matches.columns
+    ]
+
+    mu_for_join = mu_matches.rename(
+        {column: f"mu_{column}" for column in mu_statistics}
+    )
+    shape_for_join = shape_matches.select(
+        player_id_column,
+        *shape_statistics,
+    ).rename(
+        {column: f"shape_{column}" for column in shape_statistics}
+    )
+    both_matches = mu_for_join.join(
+        shape_for_join,
+        on=player_id_column,
+        how="inner",
+    )
+
+    return mu_matches, shape_matches, both_matches
+
+
+def _validate_archetype_table(
+    table: pl.DataFrame,
+    *,
+    table_name: str,
+    player_id_column: str,
+    filter_column: str,
+) -> None:
+    if not isinstance(table, pl.DataFrame):
+        raise TypeError(f"{table_name} must be a Polars DataFrame.")
+
+    required_columns = [player_id_column, filter_column]
+    missing_columns = [
+        column for column in required_columns if column not in table.columns
+    ]
+    if missing_columns:
+        raise KeyError(f"{table_name} is missing required columns: {missing_columns}.")
+
+
+def _validate_archetype_range(
+    value_range: tuple[int, int] | tuple[float, float],
+    *,
+    range_name: str,
+    option: Literal["rank", "value"],
+) -> None:
+    if not isinstance(value_range, tuple) or len(value_range) != 2:
+        raise TypeError(f"{range_name} must be a two-item tuple.")
+
+    lower, upper = value_range
+    if option == "rank":
+        if any(
+            isinstance(value, bool) or not isinstance(value, int)
+            for value in value_range
+        ):
+            raise TypeError(
+                f"{range_name} must contain integers when option='rank'."
+            )
+        if lower < 1:
+            raise ValueError(f"{range_name} ranks must be greater than zero.")
+    elif any(
+        isinstance(value, bool) or not isinstance(value, (int, float))
+        for value in value_range
+    ):
+        raise TypeError(
+            f"{range_name} must contain numeric values when option='value'."
+        )
+
+    if lower > upper:
+        raise ValueError(f"{range_name} lower bound cannot exceed its upper bound.")
+
+
+def _filter_archetype_table(
+    table: pl.DataFrame,
+    value_range: tuple[int, int] | tuple[float, float],
+    filter_column: str,
+) -> pl.DataFrame:
+    lower, upper = value_range
+    return table.filter(
+        pl.col(filter_column).is_between(lower, upper, closed="both")
     )
