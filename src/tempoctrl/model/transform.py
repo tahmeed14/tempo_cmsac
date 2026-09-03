@@ -1,4 +1,5 @@
 import polars as pl
+import pandas as pd
 
 PITCH_THIRD_ORDER = pl.Enum([
     "Middle",
@@ -41,6 +42,16 @@ PERIOD_ORDER = pl.Enum(
     ["1", "2", "AET"]
 )
 
+MODEL_ENUM_COLUMNS = [
+    "setpiecetype",
+    "starting_pitch_third",
+    "player_position_group",
+    "first_touch_ballheight",
+    "first_touch_defender_pressure_type",
+    "defender_num_challenges",
+    "game_period"
+]
+
 #FIXME:
 def filter_model_data(df : pl.LazyFrame):
     return df.filter(
@@ -50,6 +61,7 @@ def filter_model_data(df : pl.LazyFrame):
         pl.col("ball_speed_tempo_player") < 25,
         pl.col("setpiecetype") != "Drop Kick",
         pl.col("first_touch_ballheight") != "N/A",
+        pl.col("setpiecetype") == "Open Play"
     )
 
 def reclassify_setpiece_type(df: pl.LazyFrame | pl.DataFrame
@@ -128,6 +140,7 @@ def lock_reference_levels(df: pl.LazyFrame) -> pl.LazyFrame:
             .pipe(lock_position_group_levels)
             .pipe(lock_ball_height_levels)
             .pipe(lock_pressure_levels)
+            .pipe(lock_period_order)
             )
 
 def add_log_sequence(
@@ -161,6 +174,31 @@ def add_log_sequence(
     )
 
     return df
+
+def polars_enum_to_ordered_pandas(
+    pl_df: pl.DataFrame,
+    columns: list[str] = MODEL_ENUM_COLUMNS,
+) -> pd.DataFrame:
+    """
+    Convert a Polars DataFrame to pandas while preserving the category
+    ordering of specified Polars Enum columns.
+    """
+
+    category_orders = {
+        col: pl_df.schema[col].categories.to_list()
+        for col in columns
+    }
+
+    pd_df = pl_df.to_pandas()
+
+    for col, categories in category_orders.items():
+        pd_df[col] = pd.Categorical(
+            pd_df[col],
+            categories=categories,
+            ordered=True,
+        )
+
+    return pd_df
 
 def transform_model_data(df: pl.LazyFrame) -> pl.LazyFrame:
     return (df
