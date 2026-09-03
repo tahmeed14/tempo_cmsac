@@ -74,6 +74,7 @@ def plot_dev_frame(
     possession_ids: str | Iterable[str] | None = None,
     frame_id: int,
     ax: plt.Axes | None = None,
+    figsize: tuple[float, float] = (12.0, 8.0),
     pitch_color: str = "grass",
     stripe: bool = False,
     home_color: str = "#e85d4a",
@@ -110,7 +111,7 @@ def plot_dev_frame(
         linewidth=1.5,
     )
     if ax is None:
-        _, ax = pitch.draw(figsize=(12, 8))
+        _, ax = pitch.draw(figsize=figsize)
     else:
         pitch.draw(ax=ax)
     fig = ax.figure
@@ -155,6 +156,7 @@ def plot_dev_start_frame(
     frame_id: int,
     home_team_name: str = "Home",
     away_team_name: str = "Away",
+    title: str | None = None,
     **kwargs: Any,
 ) -> tuple[plt.Figure, plt.Axes]:
     """Plot all home and away players at the selected starting frame."""
@@ -167,7 +169,11 @@ def plot_dev_start_frame(
         away_team_name=away_team_name,
         **kwargs,
     )
-    ax.set_title(f"{home_team_name} vs {away_team_name} | Frame {frame_id}", fontsize=14, pad=12)
+    ax.set_title(
+        title if title is not None else f"{home_team_name} vs {away_team_name} | Frame {frame_id}",
+        fontsize=14,
+        pad=12,
+    )
     return fig, ax
 
 
@@ -180,6 +186,7 @@ def plot_dev_players_to_pass(
     pass_frame: int | None = None,
     home_team_name: str = "Home",
     away_team_name: str = "Away",
+    title: str | None = None,
     **kwargs: Any,
 ) -> tuple[plt.Figure, plt.Axes]:
     """Plot every player's movement from the start to the pass attempt."""
@@ -201,7 +208,11 @@ def plot_dev_players_to_pass(
         away_team_name=away_team_name,
         **kwargs,
     )
-    ax.set_title(f"{home_team_name} vs {away_team_name} | Start to Pass Attempt", fontsize=14, pad=12)
+    ax.set_title(
+        title if title is not None else f"{home_team_name} vs {away_team_name} | Start to Pass Attempt",
+        fontsize=14,
+        pad=12,
+    )
     return fig, ax
 
 
@@ -215,6 +226,7 @@ def plot_dev_possession_movement(
     home_team_name: str = "Home",
     away_team_name: str = "Away",
     ball_trajectory_color: str = "darkorange",
+    title: str | None = None,
     **kwargs: Any,
 ) -> tuple[plt.Figure, plt.Axes]:
     """Plot movement and ball trajectory from pass attempt to possession end."""
@@ -244,7 +256,11 @@ def plot_dev_possession_movement(
         show_ball_trajectory=True,
         **kwargs,
     )
-    ax.set_title(f"{home_team_name} vs {away_team_name} | Pass Attempt to Possession End", fontsize=14, pad=12)
+    ax.set_title(
+        title if title is not None else f"{home_team_name} vs {away_team_name} | Pass Attempt to Possession End",
+        fontsize=14,
+        pad=12,
+    )
     return fig, ax
 
 
@@ -258,6 +274,7 @@ def animate_dev_frames(
     end_frame: int | None = None,
     interval: int = 50,
     ax: plt.Axes | None = None,
+    figsize: tuple[float, float] = (12.0, 8.0),
     pitch_color: str = "grass",
     stripe: bool = False,
     home_color: str = "#e85d4a",
@@ -298,7 +315,7 @@ def animate_dev_frames(
         linewidth=1.5,
     )
     if ax is None:
-        _, ax = pitch.draw(figsize=(12, 8))
+        _, ax = pitch.draw(figsize=figsize)
     else:
         pitch.draw(ax=ax)
     fig = ax.figure
@@ -337,6 +354,7 @@ def plot_dev_movement(
     end_frame: int | None = None,
     interval: int = 50,
     ax: plt.Axes | None = None,
+    figsize: tuple[float, float] = (12.0, 8.0),
     pitch_color: str = "grass",
     stripe: bool = False,
     home_color: str = "#e85d4a",
@@ -387,7 +405,7 @@ def plot_dev_movement(
         linewidth=1.5,
     )
     if ax is None:
-        _, ax = pitch.draw(figsize=(12, 8))
+        _, ax = pitch.draw(figsize=figsize)
     else:
         pitch.draw(ax=ax)
     fig = ax.figure
@@ -452,6 +470,7 @@ def plot_dev_player_movement(
     end_frame: int | None = None,
     interval: int = 50,
     ax: plt.Axes | None = None,
+    figsize: tuple[float, float] = (12.0, 8.0),
     pitch_color: str = "grass",
     stripe: bool = False,
     home_color: str = "#e85d4a",
@@ -513,7 +532,7 @@ def plot_dev_player_movement(
         linewidth=1.5,
     )
     if ax is None:
-        _, ax = pitch.draw(figsize=(12, 8))
+        _, ax = pitch.draw(figsize=figsize)
     else:
         pitch.draw(ax=ax)
     fig = ax.figure
