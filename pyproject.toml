@@ -17,6 +17,8 @@ dependencies = [
     "executing==2.2.1",
     "frozenlist==1.8.0",
     "fsspec==2026.1.0",
+    "h5netcdf>=1.8.1",
+    "h5py>=3.16.0",
     "idna==3.11",
     "ipykernel==7.1.0",
     "ipython==9.9.0",
