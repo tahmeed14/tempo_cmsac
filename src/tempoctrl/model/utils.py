@@ -392,6 +392,20 @@ def summarize_archetype_overlap(
         alpha_probability_supported.sum().alias(
             "number_of_players_probability_supported_alpha"
         ),
+        (
+            (pl.col("mu_credible") == "Credible")
+            & (pl.col("shape_credible") == "Credible")
+        )
+        .sum()
+        .alias("not_strict_num_players_credible_both"),
+        (
+            (pl.col("mu_credible") == "Credible")
+            & (pl.col("shape_credible") == "Credible")
+            & mu_probability_supported
+            & alpha_probability_supported
+        )
+        .sum()
+        .alias("strict_num_players_credible_both"),
     )
 
     count_columns = [
@@ -400,6 +414,8 @@ def summarize_archetype_overlap(
         "number_of_players_credible_alpha",
         "number_of_players_probability_supported_mu",
         "number_of_players_probability_supported_alpha",
+        "not_strict_num_players_credible_both",
+        "strict_num_players_credible_both",
     ]
     summary = (
         pl.DataFrame({"category": _ARCHETYPE_CATEGORIES})
@@ -439,6 +455,22 @@ def summarize_archetype_overlap(
             )
             .otherwise(0.0)
             .alias("percent_of_players_probability_supported_alpha"),
+            pl.when(pl.col("number_of_players") > 0)
+            .then(
+                pl.col("not_strict_num_players_credible_both")
+                / pl.col("number_of_players")
+                * 100
+            )
+            .otherwise(0.0)
+            .alias("not_strict_percent_players_credible_both"),
+            pl.when(pl.col("number_of_players") > 0)
+            .then(
+                pl.col("strict_num_players_credible_both")
+                / pl.col("number_of_players")
+                * 100
+            )
+            .otherwise(0.0)
+            .alias("strict_percent_players_credible_both"),
         )
         .sort("_category_order")
         .drop("_category_order")
@@ -455,6 +487,10 @@ def summarize_archetype_overlap(
         "percent_of_players_probability_supported_mu",
         "number_of_players_probability_supported_alpha",
         "percent_of_players_probability_supported_alpha",
+        "not_strict_num_players_credible_both",
+        "not_strict_percent_players_credible_both",
+        "strict_num_players_credible_both",
+        "strict_percent_players_credible_both",
     )
 
 
