@@ -25,19 +25,27 @@ DEFAULT_MU_OPPONENT_OUTPUT_PATH = Path(
 MU_PLAYER_COLUMNS = (
     "model", "group", "player_id", "playername", "teamname", "estimate",
     "posterior_sd", "hdi_prob", "hdi_lower", "hdi_upper", "p_gt_zero",
-    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "tempo_ratio",
+    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "group_sd_variable",
+    "group_sd_estimate", "group_sd_posterior_sd", "group_sd_hdi_lower",
+    "group_sd_hdi_upper", "group_sd_r_hat", "group_sd_ess_bulk",
+    "group_sd_ess_tail", "tempo_ratio",
     "tempo_ratio_hdi_lower", "tempo_ratio_hdi_upper", "tempo_pct_difference",
-    "tempo_pct_difference_lower", "tempo_pct_difference_upper", "rank",
+    "tempo_pct_difference_lower", "tempo_pct_difference_upper",
+    "expected_tempo_pct_change", "rank",
 )
 
 ALPHA_PLAYER_COLUMNS = (
     "model", "group", "player_id", "playername", "teamname", "estimate",
     "posterior_sd", "hdi_prob", "hdi_lower", "hdi_upper", "p_gt_zero",
-    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "shape_ratio",
+    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "group_sd_variable",
+    "group_sd_estimate", "group_sd_posterior_sd", "group_sd_hdi_lower",
+    "group_sd_hdi_upper", "group_sd_r_hat", "group_sd_ess_bulk",
+    "group_sd_ess_tail", "shape_ratio",
     "shape_ratio_hdi_lower", "shape_ratio_hdi_upper", "conditional_cv_ratio",
     "conditional_cv_ratio_hdi_lower", "conditional_cv_ratio_hdi_upper",
     "conditional_cv_pct_difference", "conditional_cv_pct_difference_lower",
-    "conditional_cv_pct_difference_upper", "conditional_variance_ratio",
+    "conditional_cv_pct_difference_upper", "conditional_cv_pct_change",
+    "conditional_variance_ratio",
     "conditional_variance_ratio_hdi_lower",
     "conditional_variance_ratio_hdi_upper",
     "conditional_variance_pct_difference",
@@ -48,9 +56,13 @@ ALPHA_PLAYER_COLUMNS = (
 MU_OPPONENT_COLUMNS = (
     "model", "group", "opponent_id", "opponent_teamname", "estimate",
     "posterior_sd", "hdi_prob", "hdi_lower", "hdi_upper", "p_gt_zero",
-    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "tempo_ratio",
+    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "group_sd_variable",
+    "group_sd_estimate", "group_sd_posterior_sd", "group_sd_hdi_lower",
+    "group_sd_hdi_upper", "group_sd_r_hat", "group_sd_ess_bulk",
+    "group_sd_ess_tail", "tempo_ratio",
     "tempo_ratio_hdi_lower", "tempo_ratio_hdi_upper", "tempo_pct_difference",
-    "tempo_pct_difference_lower", "tempo_pct_difference_upper", "rank",
+    "tempo_pct_difference_lower", "tempo_pct_difference_upper",
+    "expected_tempo_pct_change", "rank",
 )
 
 
@@ -293,7 +305,53 @@ def _summarize_group_specific_effect(
     )
     if table.height != len(levels) or table[id_column].n_unique() != len(levels):
         raise ValueError(f"Expected one posterior row per {group_name} level.")
-    return table
+    return _add_group_sd_summary(table, idata, variable_name)
+
+
+def _add_group_sd_summary(
+    table: pl.DataFrame,
+    idata: Any,
+    effect_variable_name: str,
+) -> pl.DataFrame:
+    """Attach the group-level random-effect SD posterior to every level."""
+    posterior = idata.posterior
+    sigma_variable = f"{effect_variable_name}_sigma"
+    if sigma_variable not in posterior:
+        raise KeyError(
+            f"Posterior random-effect SD variable {sigma_variable!r} was not found."
+        )
+    if set(posterior[sigma_variable].dims) != {"chain", "draw"}:
+        raise ValueError(
+            f"Posterior random-effect SD variable {sigma_variable!r} must be scalar "
+            "apart from chain and draw dimensions."
+        )
+
+    summary = _summary_with_95_hdi(idata, [sigma_variable])
+    if summary.shape[0] != 1:
+        raise ValueError(
+            f"Expected one summary row for {sigma_variable!r}; found "
+            f"{summary.shape[0]}."
+        )
+    required_columns = {"mean", "sd", "r_hat", "ess_bulk", "ess_tail"}
+    missing_columns = required_columns.difference(summary.columns)
+    if missing_columns:
+        raise ValueError(
+            "az.summary() did not return required group-SD columns: "
+            f"{sorted(missing_columns)}."
+        )
+    hdi_lower_column, hdi_upper_column = _find_hdi_columns(summary.columns)
+    row = summary.iloc[0]
+
+    return table.with_columns(
+        pl.lit(sigma_variable).alias("group_sd_variable"),
+        pl.lit(float(row["mean"])).alias("group_sd_estimate"),
+        pl.lit(float(row["sd"])).alias("group_sd_posterior_sd"),
+        pl.lit(float(row[hdi_lower_column])).alias("group_sd_hdi_lower"),
+        pl.lit(float(row[hdi_upper_column])).alias("group_sd_hdi_upper"),
+        pl.lit(float(row["r_hat"])).alias("group_sd_r_hat"),
+        pl.lit(float(row["ess_bulk"])).alias("group_sd_ess_bulk"),
+        pl.lit(float(row["ess_tail"])).alias("group_sd_ess_tail"),
+    )
 
 
 def _read_metadata(metadata_lookup_path: str | Path) -> pl.DataFrame:
@@ -398,6 +456,9 @@ def _add_tempo_transformations(table: pl.DataFrame) -> pl.DataFrame:
         ((pl.col("tempo_ratio_hdi_upper") - 1) * 100).alias(
             "tempo_pct_difference_upper"
         ),
+        ((pl.col("tempo_ratio") - 1) * 100).alias(
+            "expected_tempo_pct_change"
+        ),
     )
 
 
@@ -431,6 +492,9 @@ def _add_alpha_transformations(table: pl.DataFrame) -> pl.DataFrame:
             ),
             ((pl.col("conditional_cv_ratio_hdi_upper") - 1) * 100).alias(
                 "conditional_cv_pct_difference_upper"
+            ),
+            ((pl.col("conditional_cv_ratio") - 1) * 100).alias(
+                "conditional_cv_pct_change"
             ),
             ((pl.col("conditional_variance_ratio") - 1) * 100).alias(
                 "conditional_variance_pct_difference"
