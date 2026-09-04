@@ -289,6 +289,15 @@ def discover_archetypes(
         on=player_id_column,
         how="inner",
     )
+    identity_columns = [
+        column
+        for column in (player_id_column, "playername", "teamname", "count")
+        if column in both_matches.columns
+    ]
+    remaining_columns = [
+        column for column in both_matches.columns if column not in identity_columns
+    ]
+    both_matches = both_matches.select(*identity_columns, *remaining_columns)
 
     return mu_matches, shape_matches, both_matches
 
