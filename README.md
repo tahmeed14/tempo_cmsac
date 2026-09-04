@@ -1,7 +1,4 @@
-# "Tempo Control" — Carnegie Mellon Sports Analytics Conference 2026
-
-Author: Tahmeed Tureen \<<tureen@umich.edu>\> \
-Independent Football (Soccer) Analytics Researcher
+# "Tempo" — Carnegie Mellon Sports Analytics Conference 2026
 
 ## Download the public data
 
