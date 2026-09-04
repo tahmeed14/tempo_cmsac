@@ -21,14 +21,14 @@ DEFAULT_ALPHA_PLAYER_OUTPUT_PATH = Path(
 DEFAULT_MU_OPPONENT_OUTPUT_PATH = Path(
     "paper/tables/model_mu_opponent_random_effects.csv"
 )
+DEFAULT_GROUP_SD_OUTPUT_PATH = Path(
+    "paper/tables/model_random_effect_standard_deviations.csv"
+)
 
 MU_PLAYER_COLUMNS = (
     "model", "group", "player_id", "playername", "teamname", "estimate",
     "posterior_sd", "hdi_prob", "hdi_lower", "hdi_upper", "p_gt_zero",
-    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "group_sd_variable",
-    "group_sd_estimate", "group_sd_posterior_sd", "group_sd_hdi_lower",
-    "group_sd_hdi_upper", "group_sd_r_hat", "group_sd_ess_bulk",
-    "group_sd_ess_tail", "tempo_ratio",
+    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "tempo_ratio",
     "tempo_ratio_hdi_lower", "tempo_ratio_hdi_upper", "tempo_pct_difference",
     "tempo_pct_difference_lower", "tempo_pct_difference_upper",
     "expected_tempo_pct_change", "rank",
@@ -37,10 +37,7 @@ MU_PLAYER_COLUMNS = (
 ALPHA_PLAYER_COLUMNS = (
     "model", "group", "player_id", "playername", "teamname", "estimate",
     "posterior_sd", "hdi_prob", "hdi_lower", "hdi_upper", "p_gt_zero",
-    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "group_sd_variable",
-    "group_sd_estimate", "group_sd_posterior_sd", "group_sd_hdi_lower",
-    "group_sd_hdi_upper", "group_sd_r_hat", "group_sd_ess_bulk",
-    "group_sd_ess_tail", "shape_ratio",
+    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "shape_ratio",
     "shape_ratio_hdi_lower", "shape_ratio_hdi_upper", "conditional_cv_ratio",
     "conditional_cv_ratio_hdi_lower", "conditional_cv_ratio_hdi_upper",
     "conditional_cv_pct_difference", "conditional_cv_pct_difference_lower",
@@ -56,13 +53,16 @@ ALPHA_PLAYER_COLUMNS = (
 MU_OPPONENT_COLUMNS = (
     "model", "group", "opponent_id", "opponent_teamname", "estimate",
     "posterior_sd", "hdi_prob", "hdi_lower", "hdi_upper", "p_gt_zero",
-    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "group_sd_variable",
-    "group_sd_estimate", "group_sd_posterior_sd", "group_sd_hdi_lower",
-    "group_sd_hdi_upper", "group_sd_r_hat", "group_sd_ess_bulk",
-    "group_sd_ess_tail", "tempo_ratio",
+    "p_lt_zero", "r_hat", "ess_bulk", "ess_tail", "tempo_ratio",
     "tempo_ratio_hdi_lower", "tempo_ratio_hdi_upper", "tempo_pct_difference",
     "tempo_pct_difference_lower", "tempo_pct_difference_upper",
     "expected_tempo_pct_change", "rank",
+)
+
+GROUP_SD_COLUMNS = (
+    "model", "group", "effect_variable", "group_sd_variable", "estimate",
+    "posterior_sd", "hdi_prob", "hdi_lower", "hdi_upper", "r_hat",
+    "ess_bulk", "ess_tail",
 )
 
 
@@ -220,6 +220,42 @@ def generate_mu_opponent_random_effects_table(
     return table
 
 
+def generate_random_effect_standard_deviations_table(
+    idata: Any,
+    *,
+    output_path: str | Path | None = DEFAULT_GROUP_SD_OUTPUT_PATH,
+) -> pl.DataFrame:
+    """Generate one posterior-summary row per random-effect SD term."""
+    posterior = getattr(idata, "posterior", None)
+    if posterior is None:
+        raise ValueError("idata must contain a posterior group.")
+
+    specifications: tuple[tuple[Literal["mu", "alpha"], str], ...] = (
+        ("mu", "player_id"),
+        ("alpha", "player_id"),
+        ("mu", "opponent_id"),
+    )
+    summaries = []
+    for component, group_name in specifications:
+        effect_variable, _ = _find_group_specific_variable(
+            posterior,
+            component=component,
+            group_name=group_name,
+        )
+        summaries.append(
+            _summarize_group_sd(
+                idata,
+                effect_variable,
+                component=component,
+                group="player" if group_name == "player_id" else "opponent",
+            )
+        )
+
+    table = _finalize_table(pl.concat(summaries), GROUP_SD_COLUMNS)
+    _write_table(table, output_path, DEFAULT_GROUP_SD_OUTPUT_PATH.name)
+    return table
+
+
 def _find_group_specific_variable(
     posterior: Any,
     *,
@@ -305,15 +341,17 @@ def _summarize_group_specific_effect(
     )
     if table.height != len(levels) or table[id_column].n_unique() != len(levels):
         raise ValueError(f"Expected one posterior row per {group_name} level.")
-    return _add_group_sd_summary(table, idata, variable_name)
+    return table
 
 
-def _add_group_sd_summary(
-    table: pl.DataFrame,
+def _summarize_group_sd(
     idata: Any,
     effect_variable_name: str,
+    *,
+    component: Literal["mu", "alpha"],
+    group: Literal["player", "opponent"],
 ) -> pl.DataFrame:
-    """Attach the group-level random-effect SD posterior to every level."""
+    """Summarize one group-level random-effect SD posterior."""
     posterior = idata.posterior
     sigma_variable = f"{effect_variable_name}_sigma"
     if sigma_variable not in posterior:
@@ -342,15 +380,21 @@ def _add_group_sd_summary(
     hdi_lower_column, hdi_upper_column = _find_hdi_columns(summary.columns)
     row = summary.iloc[0]
 
-    return table.with_columns(
-        pl.lit(sigma_variable).alias("group_sd_variable"),
-        pl.lit(float(row["mean"])).alias("group_sd_estimate"),
-        pl.lit(float(row["sd"])).alias("group_sd_posterior_sd"),
-        pl.lit(float(row[hdi_lower_column])).alias("group_sd_hdi_lower"),
-        pl.lit(float(row[hdi_upper_column])).alias("group_sd_hdi_upper"),
-        pl.lit(float(row["r_hat"])).alias("group_sd_r_hat"),
-        pl.lit(float(row["ess_bulk"])).alias("group_sd_ess_bulk"),
-        pl.lit(float(row["ess_tail"])).alias("group_sd_ess_tail"),
+    return pl.DataFrame(
+        {
+            "model": [component],
+            "group": [group],
+            "effect_variable": [effect_variable_name],
+            "group_sd_variable": [sigma_variable],
+            "estimate": [float(row["mean"])],
+            "posterior_sd": [float(row["sd"])],
+            "hdi_prob": [0.95],
+            "hdi_lower": [float(row[hdi_lower_column])],
+            "hdi_upper": [float(row[hdi_upper_column])],
+            "r_hat": [float(row["r_hat"])],
+            "ess_bulk": [float(row["ess_bulk"])],
+            "ess_tail": [float(row["ess_tail"])],
+        }
     )
 
 
@@ -577,6 +621,7 @@ def main() -> None:
     mu_players = generate_mu_player_random_effects_table(idata)
     alpha_players = generate_alpha_player_random_effects_table(idata)
     mu_opponents = generate_mu_opponent_random_effects_table(idata)
+    group_sds = generate_random_effect_standard_deviations_table(idata)
     print(
         f"Wrote {mu_players.height} mu player effects to "
         f"{DEFAULT_MU_PLAYER_OUTPUT_PATH}"
@@ -588,6 +633,10 @@ def main() -> None:
     print(
         f"Wrote {mu_opponents.height} mu opponent effects to "
         f"{DEFAULT_MU_OPPONENT_OUTPUT_PATH}"
+    )
+    print(
+        f"Wrote {group_sds.height} random-effect SD summaries to "
+        f"{DEFAULT_GROUP_SD_OUTPUT_PATH}"
     )
 
 
