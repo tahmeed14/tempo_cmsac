@@ -24,6 +24,12 @@ _ARCHETYPE_CATEGORIES = (
     "Low Tempo (-mu), High Variance (-alpha)",
     "Low Tempo (-mu), Low Variance (+alpha)",
 )
+_CV_ARCHETYPE_CATEGORIES = (
+    "High Tempo (+%Δμ), High Variability (+%ΔCV)",
+    "High Tempo (+%Δμ), Low Variability (-%ΔCV)",
+    "Low Tempo (-%Δμ), High Variability (+%ΔCV)",
+    "Low Tempo (-%Δμ), Low Variability (-%ΔCV)",
+)
 
 
 def summarize_player_effects(
@@ -307,11 +313,16 @@ def summarize_archetype_overlap(
     *,
     positive_probability_threshold: float = 0.90,
     negative_probability_threshold: float = 0.10,
+    dispersion_scale: Literal["alpha", "conditional_cv"] = "alpha",
 ) -> pl.DataFrame:
     """Summarize the third table returned by :func:`discover_archetypes`.
 
     Players are assigned to one of four tempo/variance categories using the
-    signs of ``mu_posterior_mean`` and ``shape_posterior_mean``. Exact zero
+    signs of ``mu_posterior_mean`` and ``shape_posterior_mean``. By default,
+    ``shape_posterior_mean`` is interpreted as the Gamma log-shape effect, so
+    its sign has the opposite interpretation to variability. With
+    ``dispersion_scale="conditional_cv"``, it is interpreted directly as the
+    percentage effect on conditional coefficient of variation. Exact zero
     values are excluded because they have neither a positive nor negative
     sign. Percentages are reported on a 0--100 scale.
 
@@ -323,6 +334,10 @@ def summarize_archetype_overlap(
     """
     if not isinstance(overlap_table, pl.DataFrame):
         raise TypeError("overlap_table must be a Polars DataFrame.")
+    if dispersion_scale not in {"alpha", "conditional_cv"}:
+        raise ValueError(
+            "dispersion_scale must be either 'alpha' or 'conditional_cv'."
+        )
 
     required_columns = [
         "mu_posterior_mean",
@@ -360,18 +375,27 @@ def summarize_archetype_overlap(
 
     mu_positive = pl.col("mu_posterior_mean") > 0
     mu_negative = pl.col("mu_posterior_mean") < 0
-    alpha_positive = pl.col("shape_posterior_mean") > 0
-    alpha_negative = pl.col("shape_posterior_mean") < 0
+    shape_positive = pl.col("shape_posterior_mean") > 0
+    shape_negative = pl.col("shape_posterior_mean") < 0
+
+    if dispersion_scale == "alpha":
+        high_variability = shape_negative
+        low_variability = shape_positive
+        categories = _ARCHETYPE_CATEGORIES
+    else:
+        high_variability = shape_positive
+        low_variability = shape_negative
+        categories = _CV_ARCHETYPE_CATEGORIES
 
     classified = overlap_table.with_columns(
-        pl.when(mu_positive & alpha_negative)
-        .then(pl.lit(_ARCHETYPE_CATEGORIES[0]))
-        .when(mu_positive & alpha_positive)
-        .then(pl.lit(_ARCHETYPE_CATEGORIES[1]))
-        .when(mu_negative & alpha_negative)
-        .then(pl.lit(_ARCHETYPE_CATEGORIES[2]))
-        .when(mu_negative & alpha_positive)
-        .then(pl.lit(_ARCHETYPE_CATEGORIES[3]))
+        pl.when(mu_positive & high_variability)
+        .then(pl.lit(categories[0]))
+        .when(mu_positive & low_variability)
+        .then(pl.lit(categories[1]))
+        .when(mu_negative & high_variability)
+        .then(pl.lit(categories[2]))
+        .when(mu_negative & low_variability)
+        .then(pl.lit(categories[3]))
         .otherwise(None)
         .alias("category")
     ).filter(pl.col("category").is_not_null())
@@ -382,7 +406,7 @@ def summarize_archetype_overlap(
         .otherwise(pl.col("mu_p_gt_zero") < negative_probability_threshold)
     )
     alpha_probability_supported = (
-        pl.when(alpha_positive)
+        pl.when(shape_positive)
         .then(pl.col("shape_p_gt_zero") > positive_probability_threshold)
         .otherwise(pl.col("shape_p_gt_zero") < negative_probability_threshold)
     )
@@ -427,7 +451,7 @@ def summarize_archetype_overlap(
         "strict_num_players_credible_both",
     ]
     summary = (
-        pl.DataFrame({"category": _ARCHETYPE_CATEGORIES})
+        pl.DataFrame({"category": categories})
         .with_row_index("_category_order")
         .join(counts, on="category", how="left")
         .with_columns(pl.col(count_columns).fill_null(0))
