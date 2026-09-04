@@ -1,5 +1,12 @@
 from pathlib import Path
 
+from tempoctrl.reproduce_distribution_visuals import (
+    DEFAULT_ALPHA_PLAYER_FIGURE,
+    DEFAULT_MU_PLAYER_FIGURE,
+    DEFAULT_POSTERIOR_PATH,
+    plot_top_bottom_alpha_player_effects,
+    plot_top_bottom_mu_player_effects,
+)
 from tempoctrl.visualize.possessions import (
     plot_dev_start_frame,
     plot_dev_players_to_pass,
@@ -91,6 +98,14 @@ def possession_example():
 
 def main():
     possession_example()
+    plot_top_bottom_mu_player_effects(
+        DEFAULT_POSTERIOR_PATH,
+        output_path=DEFAULT_MU_PLAYER_FIGURE,
+    )
+    plot_top_bottom_alpha_player_effects(
+        DEFAULT_POSTERIOR_PATH,
+        output_path=DEFAULT_ALPHA_PLAYER_FIGURE,
+    )
 
 if __name__ == "__main__":
     main()
