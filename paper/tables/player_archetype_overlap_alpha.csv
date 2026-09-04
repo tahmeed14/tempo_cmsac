@@ -1,0 +1,5 @@
+category,number_of_players,number_of_players_credible_mu,percent_of_players_credible_mu,number_of_players_credible_alpha,percent_of_players_credible_alpha,number_of_players_probability_supported_mu,percent_of_players_probability_supported_mu,number_of_players_probability_supported_alpha,percent_of_players_probability_supported_alpha,not_strict_num_players_credible_both,not_strict_percent_players_credible_both,strict_num_players_credible_both,strict_percent_players_credible_both
+"High Tempo (+mu), High Variance (-alpha)",166,7,4.216867469879518,27,16.265060240963855,18,10.843373493975903,46,27.710843373493976,1,0.6024096385542169,1,0.6024096385542169
+"High Tempo (+mu), Low Variance (+alpha)",147,16,10.884353741496598,34,23.12925170068027,31,21.08843537414966,52,35.374149659863946,11,7.482993197278912,11,7.482993197278912
+"Low Tempo (-mu), High Variance (-alpha)",183,4,2.185792349726776,32,17.48633879781421,14,7.650273224043716,68,37.15846994535519,0,0.0,0,0.0
+"Low Tempo (-mu), Low Variance (+alpha)",177,12,6.779661016949152,33,18.64406779661017,21,11.864406779661017,51,28.8135593220339,7,3.954802259887006,7,3.954802259887006

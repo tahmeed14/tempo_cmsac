@@ -18,6 +18,18 @@ _EFFECT_STATISTIC_COLUMNS = (
     "hdi_upper",
     "p_gt_zero",
 )
+_ARCHETYPE_CATEGORIES = (
+    "High Tempo (+mu), High Variance (-alpha)",
+    "High Tempo (+mu), Low Variance (+alpha)",
+    "Low Tempo (-mu), High Variance (-alpha)",
+    "Low Tempo (-mu), Low Variance (+alpha)",
+)
+_CV_ARCHETYPE_CATEGORIES = (
+    "High Tempo (+%Δμ), High Variability (+%ΔCV)",
+    "High Tempo (+%Δμ), Low Variability (-%ΔCV)",
+    "Low Tempo (-%Δμ), High Variability (+%ΔCV)",
+    "Low Tempo (-%Δμ), Low Variability (-%ΔCV)",
+)
 
 
 def summarize_player_effects(
@@ -112,6 +124,14 @@ def summarize_player_effects(
         .rename(columns={player_dim: id_column})
         .sort_values("posterior_mean", ignore_index=True)
     )
+
+    effect_name = "shape" if variable.startswith("alpha_") else "mu"
+    credibility_column = f"{effect_name}_credible"
+    crosses_zero = (
+        (ranking["hdi_lower"] < 0) & (ranking["hdi_upper"] > 0)
+    ) | ((ranking["hdi_lower"] > 0) & (ranking["hdi_upper"] < 0))
+    ranking[credibility_column] = "Credible"
+    ranking.loc[crosses_zero, credibility_column] = "Not Credible"
 
     return ranking
 
@@ -266,6 +286,7 @@ def discover_archetypes(
     shape_for_join = shape_matches.select(
         player_id_column,
         *shape_statistics,
+        *(["shape_credible"] if "shape_credible" in shape_matches.columns else []),
     ).rename(
         {column: f"shape_{column}" for column in shape_statistics}
     )
@@ -274,8 +295,342 @@ def discover_archetypes(
         on=player_id_column,
         how="inner",
     )
+    identity_columns = [
+        column
+        for column in (player_id_column, "playername", "teamname", "count")
+        if column in both_matches.columns
+    ]
+    remaining_columns = [
+        column for column in both_matches.columns if column not in identity_columns
+    ]
+    both_matches = both_matches.select(*identity_columns, *remaining_columns)
 
     return mu_matches, shape_matches, both_matches
+
+
+def summarize_archetype_overlap(
+    overlap_table: pl.DataFrame,
+    *,
+    positive_probability_threshold: float = 0.90,
+    negative_probability_threshold: float = 0.10,
+    dispersion_scale: Literal["alpha", "conditional_cv"] = "alpha",
+) -> pl.DataFrame:
+    """Summarize the third table returned by :func:`discover_archetypes`.
+
+    Players are assigned to one of four tempo/variance categories using the
+    signs of ``mu_posterior_mean`` and ``shape_posterior_mean``. By default,
+    ``shape_posterior_mean`` is interpreted as the Gamma log-shape effect, so
+    its sign has the opposite interpretation to variability. With
+    ``dispersion_scale="conditional_cv"``, it is interpreted directly as the
+    percentage effect on conditional coefficient of variation. Exact zero
+    values are excluded because they have neither a positive nor negative
+    sign. Percentages are reported on a 0--100 scale.
+
+    Probability-supported counts use ``p_gt_zero`` in the direction of each
+    category: values above ``positive_probability_threshold`` for positive
+    effects and below ``negative_probability_threshold`` for negative effects.
+    These probabilities represent proportions of posterior draws, not the
+    probability of a tied match.
+    """
+    if not isinstance(overlap_table, pl.DataFrame):
+        raise TypeError("overlap_table must be a Polars DataFrame.")
+    if dispersion_scale not in {"alpha", "conditional_cv"}:
+        raise ValueError(
+            "dispersion_scale must be either 'alpha' or 'conditional_cv'."
+        )
+
+    required_columns = [
+        "mu_posterior_mean",
+        "shape_posterior_mean",
+        "mu_credible",
+        "shape_credible",
+        "mu_p_gt_zero",
+        "shape_p_gt_zero",
+    ]
+    missing_columns = [
+        column for column in required_columns if column not in overlap_table.columns
+    ]
+    if missing_columns:
+        raise KeyError(
+            f"overlap_table is missing required columns: {missing_columns}."
+        )
+
+    if (
+        isinstance(positive_probability_threshold, bool)
+        or not isinstance(positive_probability_threshold, (int, float))
+        or isinstance(negative_probability_threshold, bool)
+        or not isinstance(negative_probability_threshold, (int, float))
+    ):
+        raise TypeError("Probability thresholds must be numeric.")
+    if not (
+        0
+        <= negative_probability_threshold
+        < positive_probability_threshold
+        <= 1
+    ):
+        raise ValueError(
+            "Probability thresholds must satisfy "
+            "0 <= negative < positive <= 1."
+        )
+
+    mu_positive = pl.col("mu_posterior_mean") > 0
+    mu_negative = pl.col("mu_posterior_mean") < 0
+    shape_positive = pl.col("shape_posterior_mean") > 0
+    shape_negative = pl.col("shape_posterior_mean") < 0
+
+    if dispersion_scale == "alpha":
+        high_variability = shape_negative
+        low_variability = shape_positive
+        categories = _ARCHETYPE_CATEGORIES
+    else:
+        high_variability = shape_positive
+        low_variability = shape_negative
+        categories = _CV_ARCHETYPE_CATEGORIES
+
+    classified = overlap_table.with_columns(
+        pl.when(mu_positive & high_variability)
+        .then(pl.lit(categories[0]))
+        .when(mu_positive & low_variability)
+        .then(pl.lit(categories[1]))
+        .when(mu_negative & high_variability)
+        .then(pl.lit(categories[2]))
+        .when(mu_negative & low_variability)
+        .then(pl.lit(categories[3]))
+        .otherwise(None)
+        .alias("category")
+    ).filter(pl.col("category").is_not_null())
+
+    mu_probability_supported = (
+        pl.when(mu_positive)
+        .then(pl.col("mu_p_gt_zero") > positive_probability_threshold)
+        .otherwise(pl.col("mu_p_gt_zero") < negative_probability_threshold)
+    )
+    alpha_probability_supported = (
+        pl.when(shape_positive)
+        .then(pl.col("shape_p_gt_zero") > positive_probability_threshold)
+        .otherwise(pl.col("shape_p_gt_zero") < negative_probability_threshold)
+    )
+
+    counts = classified.group_by("category").agg(
+        pl.len().alias("number_of_players"),
+        (pl.col("mu_credible") == "Credible")
+        .sum()
+        .alias("number_of_players_credible_mu"),
+        (pl.col("shape_credible") == "Credible")
+        .sum()
+        .alias("number_of_players_credible_alpha"),
+        mu_probability_supported.sum().alias(
+            "number_of_players_probability_supported_mu"
+        ),
+        alpha_probability_supported.sum().alias(
+            "number_of_players_probability_supported_alpha"
+        ),
+        (
+            (pl.col("mu_credible") == "Credible")
+            & (pl.col("shape_credible") == "Credible")
+        )
+        .sum()
+        .alias("not_strict_num_players_credible_both"),
+        (
+            (pl.col("mu_credible") == "Credible")
+            & (pl.col("shape_credible") == "Credible")
+            & mu_probability_supported
+            & alpha_probability_supported
+        )
+        .sum()
+        .alias("strict_num_players_credible_both"),
+    )
+
+    count_columns = [
+        "number_of_players",
+        "number_of_players_credible_mu",
+        "number_of_players_credible_alpha",
+        "number_of_players_probability_supported_mu",
+        "number_of_players_probability_supported_alpha",
+        "not_strict_num_players_credible_both",
+        "strict_num_players_credible_both",
+    ]
+    summary = (
+        pl.DataFrame({"category": categories})
+        .with_row_index("_category_order")
+        .join(counts, on="category", how="left")
+        .with_columns(pl.col(count_columns).fill_null(0))
+        .with_columns(
+            pl.when(pl.col("number_of_players") > 0)
+            .then(
+                pl.col("number_of_players_credible_mu")
+                / pl.col("number_of_players")
+                * 100
+            )
+            .otherwise(0.0)
+            .alias("percent_of_players_credible_mu"),
+            pl.when(pl.col("number_of_players") > 0)
+            .then(
+                pl.col("number_of_players_credible_alpha")
+                / pl.col("number_of_players")
+                * 100
+            )
+            .otherwise(0.0)
+            .alias("percent_of_players_credible_alpha"),
+            pl.when(pl.col("number_of_players") > 0)
+            .then(
+                pl.col("number_of_players_probability_supported_mu")
+                / pl.col("number_of_players")
+                * 100
+            )
+            .otherwise(0.0)
+            .alias("percent_of_players_probability_supported_mu"),
+            pl.when(pl.col("number_of_players") > 0)
+            .then(
+                pl.col("number_of_players_probability_supported_alpha")
+                / pl.col("number_of_players")
+                * 100
+            )
+            .otherwise(0.0)
+            .alias("percent_of_players_probability_supported_alpha"),
+            pl.when(pl.col("number_of_players") > 0)
+            .then(
+                pl.col("not_strict_num_players_credible_both")
+                / pl.col("number_of_players")
+                * 100
+            )
+            .otherwise(0.0)
+            .alias("not_strict_percent_players_credible_both"),
+            pl.when(pl.col("number_of_players") > 0)
+            .then(
+                pl.col("strict_num_players_credible_both")
+                / pl.col("number_of_players")
+                * 100
+            )
+            .otherwise(0.0)
+            .alias("strict_percent_players_credible_both"),
+        )
+        .sort("_category_order")
+        .drop("_category_order")
+    )
+
+    return summary.select(
+        "category",
+        "number_of_players",
+        "number_of_players_credible_mu",
+        "percent_of_players_credible_mu",
+        "number_of_players_credible_alpha",
+        "percent_of_players_credible_alpha",
+        "number_of_players_probability_supported_mu",
+        "percent_of_players_probability_supported_mu",
+        "number_of_players_probability_supported_alpha",
+        "percent_of_players_probability_supported_alpha",
+        "not_strict_num_players_credible_both",
+        "not_strict_percent_players_credible_both",
+        "strict_num_players_credible_both",
+        "strict_percent_players_credible_both",
+    )
+
+
+def filter_archetype_players(
+    overlap_table: pl.DataFrame,
+    *,
+    tempo: Literal["high", "low"],
+    variance: Literal["high", "low"],
+    positive_probability_threshold: float = 0.90,
+    negative_probability_threshold: float = 0.10,
+    mu_credible: bool = True,
+    alpha_credible: bool = True,
+) -> pl.DataFrame:
+    """Return players matching one tempo/variance archetype.
+
+    Positive and negative effects must also satisfy the corresponding posterior
+    probability threshold. When a credibility flag is ``True``, that effect
+    must be labeled ``"Credible"``. When it is ``False``, credibility is not
+    used as a filter.
+
+    The result retains every column from ``overlap_table`` and places the
+    derived ``player_archetype`` column first.
+    """
+    if not isinstance(overlap_table, pl.DataFrame):
+        raise TypeError("overlap_table must be a Polars DataFrame.")
+    if tempo not in {"high", "low"}:
+        raise ValueError("tempo must be either 'high' or 'low'.")
+    if variance not in {"high", "low"}:
+        raise ValueError("variance must be either 'high' or 'low'.")
+    if not isinstance(mu_credible, bool):
+        raise TypeError("mu_credible must be a boolean.")
+    if not isinstance(alpha_credible, bool):
+        raise TypeError("alpha_credible must be a boolean.")
+
+    required_columns = [
+        "mu_posterior_mean",
+        "shape_posterior_mean",
+        "mu_p_gt_zero",
+        "shape_p_gt_zero",
+    ]
+    if mu_credible:
+        required_columns.append("mu_credible")
+    if alpha_credible:
+        required_columns.append("shape_credible")
+    missing_columns = [
+        column for column in required_columns if column not in overlap_table.columns
+    ]
+    if missing_columns:
+        raise KeyError(
+            f"overlap_table is missing required columns: {missing_columns}."
+        )
+
+    if (
+        isinstance(positive_probability_threshold, bool)
+        or not isinstance(positive_probability_threshold, (int, float))
+        or isinstance(negative_probability_threshold, bool)
+        or not isinstance(negative_probability_threshold, (int, float))
+    ):
+        raise TypeError("Probability thresholds must be numeric.")
+    if not (
+        0
+        <= negative_probability_threshold
+        < positive_probability_threshold
+        <= 1
+    ):
+        raise ValueError(
+            "Probability thresholds must satisfy "
+            "0 <= negative < positive <= 1."
+        )
+
+    if tempo == "high":
+        condition = (pl.col("mu_posterior_mean") > 0) & (
+            pl.col("mu_p_gt_zero") > positive_probability_threshold
+        )
+        tempo_index = 0
+    else:
+        condition = (pl.col("mu_posterior_mean") < 0) & (
+            pl.col("mu_p_gt_zero") < negative_probability_threshold
+        )
+        tempo_index = 2
+
+    if variance == "high":
+        condition &= (pl.col("shape_posterior_mean") < 0) & (
+            pl.col("shape_p_gt_zero") < negative_probability_threshold
+        )
+        category_index = tempo_index
+    else:
+        condition &= (pl.col("shape_posterior_mean") > 0) & (
+            pl.col("shape_p_gt_zero") > positive_probability_threshold
+        )
+        category_index = tempo_index + 1
+
+    if mu_credible:
+        condition &= pl.col("mu_credible") == "Credible"
+    if alpha_credible:
+        condition &= pl.col("shape_credible") == "Credible"
+
+    original_columns = [
+        column for column in overlap_table.columns if column != "player_archetype"
+    ]
+    return (
+        overlap_table.filter(condition)
+        .with_columns(
+            pl.lit(_ARCHETYPE_CATEGORIES[category_index]).alias("player_archetype")
+        )
+        .select("player_archetype", *original_columns)
+    )
 
 
 def _validate_archetype_table(
