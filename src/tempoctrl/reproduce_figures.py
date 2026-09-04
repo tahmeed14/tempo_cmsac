@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+import polars as pl
+
 from tempoctrl.reproduce_distribution_visuals import (
     DEFAULT_ALPHA_PLAYER_FIGURE,
     DEFAULT_MU_PLAYER_FIGURE,
@@ -7,17 +10,20 @@ from tempoctrl.reproduce_distribution_visuals import (
     plot_top_bottom_alpha_player_effects,
     plot_top_bottom_mu_player_effects,
 )
+from tempoctrl.reproduce_tables import MODEL_DATA_PATH
 from tempoctrl.visualize.possessions import (
     plot_dev_start_frame,
     plot_dev_players_to_pass,
-    plot_dev_possession_movement
+    plot_dev_possession_movement,
 )
+from tempoctrl.visualize.summary_statistics import plot_histogram
 
 FIGSIZE_FULL = (7.0, 4.5)
 FIGSIZE_WIDE = (7.0, 3.5)
 FIGSIZE_SQUARE = (5.5, 5.5)
 POSS_EXAMPLE = "src/tempoctrl/possession_example.parquet"
 FIGURES_PATH = "paper/figures"
+
 
 def save_quarto_figure(
     fig,
@@ -40,6 +46,34 @@ def save_quarto_figure(
         dpi=dpi,
         bbox_inches="tight",
     )
+
+
+def ball_speed_tempo_histograms():
+    """Save the ball-speed tempo distribution at each paper figure size."""
+    model_df = pl.read_parquet(
+        MODEL_DATA_PATH,
+        columns=["ball_speed_tempo_player"],
+    )
+    figure_sizes = {
+        "full": FIGSIZE_FULL,
+        "wide": FIGSIZE_WIDE,
+        "square": FIGSIZE_SQUARE,
+    }
+
+    for size_name, figsize in figure_sizes.items():
+        ax = plot_histogram(
+            model_df,
+            continuous_variable="ball_speed_tempo_player",
+            title="Distribution of Ball Speed Tempo",
+            y_label="# of Possessions",
+            x_label="Tempo Speed (metres/second)",
+            figsize=figsize,
+        )
+        save_quarto_figure(
+            ax.figure,
+            filename=f"ball_speed_tempo_distribution_{size_name}",
+        )
+        plt.close(ax.figure)
 
 
 def possession_example():
@@ -98,6 +132,8 @@ def possession_example():
 
 def main():
     possession_example()
+    ball_speed_tempo_histograms()
+
     plot_top_bottom_mu_player_effects(
         DEFAULT_POSTERIOR_PATH,
         output_path=DEFAULT_MU_PLAYER_FIGURE,
