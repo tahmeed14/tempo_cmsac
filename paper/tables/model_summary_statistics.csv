@@ -1,0 +1,69 @@
+section,variable,variable_label,variable_type,level,is_reference_level,statistic,value,count,percentage,missing_count,missing_percentage,used_in_mu,used_in_alpha
+sample,__analytic_sample__,Analytic sample,sample,,,n_observations,59587.0,,,0,0.0,false,false
+sample,player_id,Player,sample,,,n_unique,673.0,,,0,0.0,true,true
+sample,opponent_id,Opposition team,sample,,,n_unique,32.0,,,0,0.0,true,false
+sample,game_id,Match,sample,,,n_unique,64.0,,,0,0.0,false,false
+sample,team_id,Team,sample,,,n_unique,32.0,,,0,0.0,false,false
+outcome,ball_speed_tempo_player,Ball-speed tempo,continuous,,,count,59587.0,,,0,0.0,true,false
+outcome,ball_speed_tempo_player,Ball-speed tempo,continuous,,,mean,6.9203152165350055,,,0,0.0,true,false
+outcome,ball_speed_tempo_player,Ball-speed tempo,continuous,,,sd,3.860030771705469,,,0,0.0,true,false
+outcome,ball_speed_tempo_player,Ball-speed tempo,continuous,,,median,6.469799361762634,,,0,0.0,true,false
+outcome,ball_speed_tempo_player,Ball-speed tempo,continuous,,,q25,4.266127226066578,,,0,0.0,true,false
+outcome,ball_speed_tempo_player,Ball-speed tempo,continuous,,,q75,8.965392189405343,,,0,0.0,true,false
+outcome,ball_speed_tempo_player,Ball-speed tempo,continuous,,,p05,1.4168880201126932,,,0,0.0,true,false
+outcome,ball_speed_tempo_player,Ball-speed tempo,continuous,,,p95,14.02811754155801,,,0,0.0,true,false
+outcome,ball_speed_tempo_player,Ball-speed tempo,continuous,,,min,0.047321052631580734,,,0,0.0,true,false
+outcome,ball_speed_tempo_player,Ball-speed tempo,continuous,,,max,24.982991324744578,,,0,0.0,true,false
+continuous_predictor,game_state_goal_diff,Goal difference,continuous,,,count,59587.0,,,0,0.0,true,false
+continuous_predictor,game_state_goal_diff,Goal difference,continuous,,,mean,0.026767583533321027,,,0,0.0,true,false
+continuous_predictor,game_state_goal_diff,Goal difference,continuous,,,sd,1.2633624762864022,,,0,0.0,true,false
+continuous_predictor,game_state_goal_diff,Goal difference,continuous,,,median,0.0,,,0,0.0,true,false
+continuous_predictor,game_state_goal_diff,Goal difference,continuous,,,q25,0.0,,,0,0.0,true,false
+continuous_predictor,game_state_goal_diff,Goal difference,continuous,,,q75,0.0,,,0,0.0,true,false
+continuous_predictor,game_state_goal_diff,Goal difference,continuous,,,p05,-2.0,,,0,0.0,true,false
+continuous_predictor,game_state_goal_diff,Goal difference,continuous,,,p95,2.0,,,0,0.0,true,false
+continuous_predictor,game_state_goal_diff,Goal difference,continuous,,,min,-7.0,,,0,0.0,true,false
+continuous_predictor,game_state_goal_diff,Goal difference,continuous,,,max,7.0,,,0,0.0,true,false
+continuous_predictor,player_possession_sequence_log_z,Player possession sequence (log-standardized),continuous,,,count,59587.0,,,0,0.0,true,false
+continuous_predictor,player_possession_sequence_log_z,Player possession sequence (log-standardized),continuous,,,mean,3.37700677609647e-16,,,0,0.0,true,false
+continuous_predictor,player_possession_sequence_log_z,Player possession sequence (log-standardized),continuous,,,sd,0.9999999999999999,,,0,0.0,true,false
+continuous_predictor,player_possession_sequence_log_z,Player possession sequence (log-standardized),continuous,,,median,-0.0426371908916934,,,0,0.0,true,false
+continuous_predictor,player_possession_sequence_log_z,Player possession sequence (log-standardized),continuous,,,q25,-0.8152131740743047,,,0,0.0,true,false
+continuous_predictor,player_possession_sequence_log_z,Player possession sequence (log-standardized),continuous,,,q75,0.6681993432800186,,,0,0.0,true,false
+continuous_predictor,player_possession_sequence_log_z,Player possession sequence (log-standardized),continuous,,,p05,-1.428441230712298,,,0,0.0,true,false
+continuous_predictor,player_possession_sequence_log_z,Player possession sequence (log-standardized),continuous,,,p95,1.8082087011172328,,,0,0.0,true,false
+continuous_predictor,player_possession_sequence_log_z,Player possession sequence (log-standardized),continuous,,,min,-1.428441230712298,,,0,0.0,true,false
+continuous_predictor,player_possession_sequence_log_z,Player possession sequence (log-standardized),continuous,,,max,3.6642788003217213,,,0,0.0,true,false
+categorical_predictor,first_touch_ballheight,Ball height at first touch,categorical,Ground,true,frequency,,44108,74.02285733465354,0,0.0,true,false
+categorical_predictor,first_touch_ballheight,Ball height at first touch,categorical,Air,false,frequency,,15479,25.977142665346467,0,0.0,true,false
+categorical_predictor,first_touch_defender_pressure_type,Defender pressure at first touch,categorical,No Pressure,true,frequency,,47375,79.50559685837514,0,0.0,true,true
+categorical_predictor,first_touch_defender_pressure_type,Defender pressure at first touch,categorical,Pressured (inc. Attempted Pressure),false,frequency,,12212,20.49440314162485,0,0.0,true,true
+categorical_predictor,defender_num_challenges,Number of defender challenges,categorical,None,true,frequency,,52942,88.84823870978569,0,0.0,true,true
+categorical_predictor,defender_num_challenges,Number of defender challenges,categorical,1,false,frequency,,5913,9.923305418967225,0,0.0,true,true
+categorical_predictor,defender_num_challenges,Number of defender challenges,categorical,2+,false,frequency,,732,1.228455871247084,0,0.0,true,true
+categorical_predictor,starting_pitch_third,Starting pitch third,categorical,Middle,true,frequency,,31623,53.07030056891604,0,0.0,true,true
+categorical_predictor,starting_pitch_third,Starting pitch third,categorical,Defensive,false,frequency,,16192,27.173712386930035,0,0.0,true,true
+categorical_predictor,starting_pitch_third,Starting pitch third,categorical,Attacking,false,frequency,,11772,19.755987044153926,0,0.0,true,true
+categorical_predictor,player_position_group,Player position group,categorical,Midfielder,true,frequency,,17908,30.05353516706664,0,0.0,true,true
+categorical_predictor,player_position_group,Player position group,categorical,Goalkeeper,false,frequency,,2667,4.47580848171581,0,0.0,true,true
+categorical_predictor,player_position_group,Player position group,categorical,Centre Back,false,frequency,,16340,27.422088710624802,0,0.0,true,true
+categorical_predictor,player_position_group,Player position group,categorical,Full Back,false,frequency,,10937,18.35467467736251,0,0.0,true,true
+categorical_predictor,player_position_group,Player position group,categorical,Winger,false,frequency,,7872,13.210935271116183,0,0.0,true,true
+categorical_predictor,player_position_group,Player position group,categorical,Forward,false,frequency,,3863,6.482957692114052,0,0.0,true,true
+categorical_predictor,game_period,Match period,categorical,1,true,frequency,,30222,50.71911658583248,0,0.0,true,false
+categorical_predictor,game_period,Match period,categorical,2,false,frequency,,28580,47.96348196754326,0,0.0,true,false
+categorical_predictor,game_period,Match period,categorical,AET,false,frequency,,785,1.3174014466242636,0,0.0,true,false
+grouping_variable,player_id,Player,grouping,,,n_unique,673.0,,,0,0.0,true,true
+grouping_variable,player_id,Player,grouping,,,min_group_n,1.0,,,0,0.0,true,true
+grouping_variable,player_id,Player,grouping,,,q25_group_n,24.0,,,0,0.0,true,true
+grouping_variable,player_id,Player,grouping,,,median_group_n,60.0,,,0,0.0,true,true
+grouping_variable,player_id,Player,grouping,,,mean_group_n,88.53937592867756,,,0,0.0,true,true
+grouping_variable,player_id,Player,grouping,,,q75_group_n,122.0,,,0,0.0,true,true
+grouping_variable,player_id,Player,grouping,,,max_group_n,621.0,,,0,0.0,true,true
+grouping_variable,opponent_id,Opposition team,grouping,,,n_unique,32.0,,,0,0.0,true,false
+grouping_variable,opponent_id,Opposition team,grouping,,,min_group_n,1021.0,,,0,0.0,true,false
+grouping_variable,opponent_id,Opposition team,grouping,,,q25_group_n,1287.0,,,0,0.0,true,false
+grouping_variable,opponent_id,Opposition team,grouping,,,median_group_n,1693.0,,,0,0.0,true,false
+grouping_variable,opponent_id,Opposition team,grouping,,,mean_group_n,1862.09375,,,0,0.0,true,false
+grouping_variable,opponent_id,Opposition team,grouping,,,q75_group_n,2179.0,,,0,0.0,true,false
+grouping_variable,opponent_id,Opposition team,grouping,,,max_group_n,4138.0,,,0,0.0,true,false
