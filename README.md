@@ -1,12 +1,70 @@
-# "Tempo" — Carnegie Mellon Sports Analytics Conference 2026
+# "Rise to the Rhythm" — Carnegie Mellon Sports Analytics Conference 2026
+
+If you are here to evaluate the reproducibility of this research project, please use the `main` branch. The other branches are for development work.
+
+## Prerequisites
+
+Before running the project, make sure the following are available:
+
+- At least 20 GB of free disk space for the complete 64-match workflow.
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for managing
+  Python and the project dependencies.
+- Python 3.12 or newer. Older versions will not run end to end. `uv` can
+  download a compatible Python version when one is not already installed.
+- Your own Jupyter-compatible notebook application for fitting the model
+  interactively. Examples include VS Code with the Jupyter extension,
+  JupyterLab, or Jupyter Notebook.
+
+The project installs an IPython kernel, but it does not install a graphical
+Jupyter interface. When opening `src/tempoctrl/cmsac_model.ipynb`, select the
+Python interpreter from this project's `.venv` as the notebook kernel.
+
+## Install uv and create the project environment
+
+On macOS or Linux, install `uv` with its official standalone installer:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+On Windows, run the official installer from PowerShell:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Other installation methods are listed in
+the [`uv` installation documentation](https://docs.astral.sh/uv/getting-started/installation/).
+
+After cloning the repository, change into its root directory and create the
+locked project environment:
+
+```bash
+uv sync --frozen
+```
+
+This creates `.venv`, installs the Python version and dependencies specified by
+the project, and preserves the package versions recorded in `uv.lock`.
+
+### Set up directories
+
+Before downloading any data, run the repository initializer from the
+repository root:
+
+```bash
+uv run python initiate_repository.py
+```
+
+This creates all required directories but does not download any data. After it
+finishes, copy the downloaded files into the appropriate destinations.
 
 ## Download the public data
 
-This project uses the 64-match FIFA 2022 World Cup dataset released publicly
-by Gradient Sports (PFF FC). Gradient Sports does not provide an API for this
-dataset, so the files must be downloaded and placed in the repository manually.
+This project uses the 64-match FIFA 2022 World Cup datasets released publicly
+by Gradient Sports (formerly PFF FC). Gradient Sports does not provide an API for this
+dataset, so the files must be downloaded and placed in the repository **manually**.
 
-Download the dataset from the
+Download the datasets from the
 [Gradient Sports Google Drive folder](https://drive.google.com/drive/folders/1_a_q1e9CXeEPJ3GdCv_3-rNO3gPqacfa).
 
 The download contains four data types. Copy the files for each type into the
@@ -51,18 +109,6 @@ the required raw-data directories.
 
 ## Reproducible pipeline
 
-### Set up directories
-
-Before copying the downloaded data, run the repository initializer from the
-repository root:
-
-```bash
-python initiate_repository.py
-```
-
-This creates all required directories but does not download any data. After it
-finishes, copy the downloaded files into the destinations listed above.
-
 ### 1. Run the full development pipeline
 
 Run the full pipeline from the repository root:
@@ -98,8 +144,7 @@ the Bayesian gamma model, and writes the fitted posterior to
 `paper/results/tempo_gamma_posterior.nc`.
 
 The notebook must finish successfully before the paper tables and figures can
-be reproduced. Model fitting is the most computationally intensive stage of
-the workflow.
+be reproduced.
 
 ### 4. Reproduce the paper figures and tables
 
@@ -112,11 +157,12 @@ bash scripts/reproduce_paper_figs_and_tables.sh
 This regenerates the model-summary, fixed-effect, random-effect, and player-
 archetype tables under `paper/tables/`. It also regenerates the possession,
 tempo-distribution, player-effect, and player-archetype figures under
-`paper/figures/`.
+`paper/figures/`. Both PDF and PNG versions of those files are generated for 
+downstream Quarto paper writing.
 
-### Run the development pipeline for selected matches
+### OPTIONAL: Run the development pipeline for selected matches
 
-There are a total of 64 matches. Pass one or more numeric match IDs to
+To avoid running the whole set of matches, you can pass one or more numeric match IDs to
 the selected-match development script:
 
 ```bash
@@ -127,14 +173,14 @@ bash scripts/dev_one_match_pipeline.sh 3859
 bash scripts/dev_one_match_pipeline.sh 3859 3860 3861
 ```
 
-This option is useful for development and testing when running the complete
+This option is useful for **only** for development and testing when running the complete
 64-match workflow would require too much storage or processing time. Selected-
 match outputs are written under `data/investigate/` and do not replace the
-full-sample model inputs required to reproduce the paper results.
+full-sample model inputs required to reproduce the paper results. 
 
 ## Development and testing environments
 
-### macOS
+## macOS
 
 Specifications:
 
@@ -142,3 +188,24 @@ Specifications:
 - SSD: 512 GB
 - RAM: 16 GB
 - Apple Silicon Chip
+
+### End-to-end reproduction time
+
+The complete workflow was timed on the macOS development environment described
+above using a clean clone, the full 64-match raw dataset, a new `uv`
+environment, and a newly fitted model. No staged, processed, analysis, or
+posterior files were carried into the run.
+
+- `bash scripts/dev_full_pipeline.sh` took 31 minutes, 34 seconds.
+- `bash scripts/reproduce_model_df.sh` took 9 seconds.
+- Running `src/tempoctrl/cmsac_model.ipynb` from top to bottom took 12 minutes,
+  57 seconds.
+- `bash scripts/reproduce_paper_figs_and_tables.sh` took 17 seconds.
+
+The complete four-stage workflow took approximately 44 minutes, 58 seconds.
+Runtime will vary with hardware, operating system, and available processor
+cores.
+
+## Linux Mint xFCE
+
+To be added soon...
